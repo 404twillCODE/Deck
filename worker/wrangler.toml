@@ -10,7 +10,7 @@ bindings = [
 
 [[migrations]]
 tag = "v1"
-new_classes = ["BlackjackTableDO", "PokerTableDO"]
+new_sqlite_classes = ["BlackjackTableDO", "PokerTableDO"]
 
 [vars]
 ENVIRONMENT = "development"
