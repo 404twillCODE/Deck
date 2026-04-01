@@ -1,10 +1,11 @@
 'use client'
 
-import { motion, useScroll, useTransform } from 'framer-motion'
+import { useState } from 'react'
+import { motion, useScroll, useTransform, AnimatePresence } from 'framer-motion'
 import { useRef } from 'react'
 import Link from 'next/link'
-import { AnimatedButton } from '@/components/ui'
-import { ArrowRight, Users, Shield, Zap, Sparkles } from 'lucide-react'
+import { AnimatedButton, DeckLogo } from '@/components/ui'
+import { ArrowRight, Users, Shield, Zap, Sparkles, Search } from 'lucide-react'
 
 function FloatingCard({ suit, rank, className, delay }: { suit: string; rank: string; className?: string; delay?: number }) {
   const isRedSuit = suit === '♥' || suit === '♦'
@@ -12,7 +13,6 @@ function FloatingCard({ suit, rank, className, delay }: { suit: string; rank: st
 
   return (
     <div className={`absolute z-[5] pointer-events-auto ${className}`}>
-      {/* Float layer -- perpetual bob, never interrupted */}
       <motion.div
         initial={{ opacity: 0, y: 50, scale: 0.8 }}
         animate={{
@@ -28,7 +28,6 @@ function FloatingCard({ suit, rank, className, delay }: { suit: string; rank: st
           rotate: { delay: (delay || 0) + 0.6, duration: 7, repeat: Infinity, ease: 'easeInOut' },
         }}
       >
-        {/* Hover layer -- separate so it doesn't fight the float */}
         <motion.div
           className="w-20 h-28 md:w-24 md:h-36 cursor-pointer will-change-transform rounded-xl md:rounded-2xl overflow-hidden bg-gradient-to-br from-[#1a1a2e] via-[#16162a] to-[#0f0f1e] border border-white/[0.08] shadow-[0_4px_20px_rgba(0,0,0,0.4),0_12px_40px_rgba(0,0,0,0.3),inset_0_1px_0_rgba(255,255,255,0.06)] p-2 md:p-2.5 flex flex-col"
           style={{ perspective: 800 }}
@@ -105,7 +104,7 @@ function HeroSection() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, delay: 0.4 }}
         >
-          Poker and Blackjack, beautifully crafted. Create a room, share the code, and deal in seconds.
+          Your favorite card games, all in one place. Create a room, share the code, and start playing in seconds.
         </motion.p>
 
         <motion.div
@@ -176,7 +175,7 @@ function FeatureSection() {
             Cards, reimagined.
           </h2>
           <p className="text-text-secondary text-lg max-w-md mx-auto">
-            Everything you need for the perfect game night, designed with obsessive attention to detail.
+            Everything you need for the perfect game night — from casino classics to party favorites.
           </p>
         </motion.div>
 
@@ -203,49 +202,201 @@ function FeatureSection() {
   )
 }
 
+const GAMES = [
+  {
+    id: 'blackjack',
+    name: 'Blackjack',
+    description: 'Classic 21 with multiplayer tables. Hit, stand, or double down — with fluid card animations and real-time updates.',
+    emoji: '🃏',
+    category: 'casino',
+    tags: ['2-7 Players', 'Server Dealt'],
+    status: 'live' as const,
+  },
+  {
+    id: 'poker',
+    name: "Texas Hold'em",
+    description: 'Full poker experience — blinds, community cards, all-in moments. Server-side shuffles keep every hand honest.',
+    emoji: '♠️',
+    category: 'casino',
+    tags: ['2-9 Players', 'No Limit'],
+    status: 'live' as const,
+  },
+  {
+    id: 'uno',
+    name: 'Uno',
+    description: 'The classic color-matching card game. Play action cards, reverse turns, and race to empty your hand first.',
+    emoji: '🔴',
+    category: 'classic',
+    tags: ['2-10 Players', 'Color Match'],
+    status: 'live' as const,
+  },
+  {
+    id: 'crazy-eights',
+    name: 'Crazy Eights',
+    description: 'Match suits or ranks and play eights to change the suit. Simple to learn, surprisingly strategic.',
+    emoji: '8️⃣',
+    category: 'classic',
+    tags: ['2-7 Players', 'Classic'],
+    status: 'wip' as const,
+  },
+  {
+    id: 'go-fish',
+    name: 'Go Fish',
+    description: 'Ask for cards and collect sets of four. A fun, casual game perfect for all ages.',
+    emoji: '🐟',
+    category: 'classic',
+    tags: ['2-6 Players', 'Family'],
+    status: 'wip' as const,
+  },
+  {
+    id: 'war',
+    name: 'War',
+    description: 'Flip and compare — highest card wins. Ties trigger an all-out war. Pure luck, pure fun.',
+    emoji: '⚔️',
+    category: 'classic',
+    tags: ['2 Players', 'Fast'],
+    status: 'wip' as const,
+  },
+  {
+    id: 'spoons',
+    name: 'Spoons',
+    description: 'Race to collect four of a kind, then grab a spoon before someone else does. Fast and frantic.',
+    emoji: '🥄',
+    category: 'party',
+    tags: ['3-8 Players', 'Party'],
+    status: 'wip' as const,
+  },
+  {
+    id: 'slapjack',
+    name: 'Slapjack',
+    description: 'Flip cards and slap the pile when a Jack appears. Quick reflexes win. Hilarious chaos.',
+    emoji: '✋',
+    category: 'party',
+    tags: ['2-8 Players', 'Reaction'],
+    status: 'wip' as const,
+  },
+]
+
+const CATEGORIES = [
+  { id: 'all', label: 'All Games' },
+  { id: 'casino', label: 'Casino' },
+  { id: 'classic', label: 'Classic' },
+  { id: 'party', label: 'Party' },
+]
+
 function GameShowcase() {
+  const [search, setSearch] = useState('')
+  const [category, setCategory] = useState('all')
+
+  const filtered = GAMES.filter((g) => {
+    if (category !== 'all' && g.category !== category) return false
+    if (search && !g.name.toLowerCase().includes(search.toLowerCase())) return false
+    return true
+  })
+
   return (
     <section className="relative py-32 px-4">
       <div className="max-w-5xl mx-auto">
-        <div className="grid md:grid-cols-2 gap-8">
-          <motion.div
-            className="glass rounded-3xl p-8 md:p-10 relative overflow-hidden group"
-            initial={{ opacity: 0, x: -30 }}
-            whileInView={{ opacity: 1, x: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.6 }}
-          >
-            <div className="absolute top-0 right-0 w-40 h-40 bg-gradient-to-bl from-emerald-500/[0.06] to-transparent rounded-bl-full" />
-            <div className="text-4xl mb-4">🃏</div>
-            <h3 className="text-2xl font-bold text-text-primary mb-3">Blackjack</h3>
-            <p className="text-text-secondary leading-relaxed mb-6">
-              Classic 21 with multiplayer tables. Hit, stand, or double down — with fluid card animations and real-time updates.
-            </p>
-            <div className="flex gap-2">
-              <span className="text-xs px-3 py-1 rounded-full bg-white/[0.04] text-text-tertiary">2-7 Players</span>
-              <span className="text-xs px-3 py-1 rounded-full bg-white/[0.04] text-text-tertiary">Server Dealt</span>
-            </div>
-          </motion.div>
+        <motion.div
+          className="text-center mb-10"
+          initial={{ opacity: 0, y: 30 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.6 }}
+        >
+          <h2 className="text-3xl md:text-5xl font-bold text-gradient mb-4">Game Library</h2>
+          <p className="text-text-secondary text-lg max-w-md mx-auto">
+            Pick your game. Create a room. Start playing.
+          </p>
+        </motion.div>
 
-          <motion.div
-            className="glass rounded-3xl p-8 md:p-10 relative overflow-hidden group"
-            initial={{ opacity: 0, x: 30 }}
-            whileInView={{ opacity: 1, x: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.6, delay: 0.15 }}
-          >
-            <div className="absolute top-0 right-0 w-40 h-40 bg-gradient-to-bl from-accent/[0.06] to-transparent rounded-bl-full" />
-            <div className="text-4xl mb-4">♠️</div>
-            <h3 className="text-2xl font-bold text-text-primary mb-3">Texas Hold&apos;em</h3>
-            <p className="text-text-secondary leading-relaxed mb-6">
-              Full poker experience — blinds, community cards, all-in moments. Server-side shuffles keep every hand honest.
-            </p>
-            <div className="flex gap-2">
-              <span className="text-xs px-3 py-1 rounded-full bg-white/[0.04] text-text-tertiary">2-9 Players</span>
-              <span className="text-xs px-3 py-1 rounded-full bg-white/[0.04] text-text-tertiary">No Limit</span>
-            </div>
-          </motion.div>
+        {/* Search */}
+        <div className="relative max-w-md mx-auto mb-8">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-text-tertiary pointer-events-none" />
+          <input
+            type="text"
+            placeholder="Search games..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-11 pr-4 py-3 rounded-xl glass text-text-primary placeholder:text-text-tertiary text-sm focus:outline-none focus:ring-1 focus:ring-accent/30 bg-transparent"
+          />
         </div>
+
+        {/* Category filters */}
+        <div className="flex justify-center gap-2 mb-10 flex-wrap">
+          {CATEGORIES.map((cat) => (
+            <button
+              key={cat.id}
+              onClick={() => setCategory(cat.id)}
+              className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
+                category === cat.id
+                  ? 'bg-accent/20 text-accent-light border border-accent/30'
+                  : 'glass text-text-secondary hover:text-text-primary border border-transparent'
+              }`}
+            >
+              {cat.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Game grid */}
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          <AnimatePresence mode="popLayout">
+            {filtered.map((game, i) => {
+              const isLive = game.status === 'live'
+              const inner = (
+                <motion.div
+                  key={game.id}
+                  layout
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  transition={{ delay: i * 0.05, duration: 0.4 }}
+                  whileHover={isLive ? { scale: 1.03, y: -4 } : {}}
+                  whileTap={isLive ? { scale: 0.98 } : {}}
+                  className={`glass rounded-2xl p-6 relative overflow-hidden group transition-colors text-left ${
+                    isLive ? 'cursor-pointer hover:bg-white/[0.06]' : 'hover:bg-white/[0.04]'
+                  }`}
+                >
+                  {game.status === 'wip' && (
+                    <div className="absolute top-4 right-4 flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                      <span className="text-xs font-medium text-amber-400 leading-none">Coming Soon</span>
+                    </div>
+                  )}
+                  {isLive && (
+                    <div className="absolute top-4 right-4 flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                      <span className="text-xs font-medium text-emerald-400 leading-none">Play Now</span>
+                    </div>
+                  )}
+                  <div className="text-3xl mb-3">{game.emoji}</div>
+                  <h3 className="text-lg font-bold text-text-primary mb-2">{game.name}</h3>
+                  <p className="text-sm text-text-secondary leading-relaxed mb-4">{game.description}</p>
+                  <div className="flex gap-2 flex-wrap">
+                    {game.tags.map((tag) => (
+                      <span key={tag} className="text-xs px-2.5 py-1 rounded-full bg-white/[0.04] text-text-tertiary">
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                </motion.div>
+              )
+
+              return isLive ? (
+                <Link key={game.id} href={`/signup?game=${game.id}`}>
+                  {inner}
+                </Link>
+              ) : (
+                <div key={game.id}>{inner}</div>
+              )
+            })}
+          </AnimatePresence>
+        </div>
+
+        {filtered.length === 0 && (
+          <div className="text-center py-12 text-text-secondary">No games found matching your search.</div>
+        )}
       </div>
     </section>
   )
@@ -284,9 +435,7 @@ function Footer() {
     <footer className="border-t border-white/[0.04] py-8 px-4">
       <div className="max-w-5xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-accent/20 flex items-center justify-center">
-            <span className="text-xs font-bold text-accent-light">D</span>
-          </div>
+          <DeckLogo size="sm" />
           <span className="text-sm font-semibold text-text-primary">Deck</span>
         </div>
         <p className="text-xs text-text-tertiary">
@@ -303,9 +452,7 @@ export default function LandingPage() {
       <nav className="fixed top-0 left-0 right-0 z-50 px-4 py-4">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-accent/20 flex items-center justify-center">
-              <span className="text-sm font-bold text-accent-light">D</span>
-            </div>
+            <DeckLogo />
             <span className="text-lg font-semibold text-text-primary">Deck</span>
           </Link>
           <div className="flex items-center gap-3">

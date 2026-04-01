@@ -1,91 +1,68 @@
 #!/usr/bin/env bash
-set -u
+set -e
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-print_header() {
-  printf '%s\n' "============================================"
-  printf '%s\n' "          DECK - Game Server Launcher"
-  printf '%s\n' "============================================"
-  printf '\n'
-}
+echo "============================================"
+echo "          DECK - Game Server Launcher"
+echo "============================================"
+echo ""
 
-fail() {
-  printf '\n%s\n' "ERROR: $1" >&2
-  exit 1
-}
-
-kill_port() {
-  local port="$1"
-  local pids
+# ─── Kill anything on ports 3000 / 8787 ───────────
+echo "[1/4] Clearing ports and stale state..."
+for port in 3000 8787; do
   pids="$(lsof -nP -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null || true)"
-  if [[ -n "${pids}" ]]; then
-    # shellcheck disable=SC2086
-    kill -9 ${pids} >/dev/null 2>&1 || true
+  if [ -n "$pids" ]; then
+    kill -9 $pids 2>/dev/null || true
+    echo "   Killed process(es) on port $port"
   fi
+done
+rm -rf "$ROOT_DIR/worker/.wrangler/state" 2>/dev/null || true
+echo "   Ports and state cleared."
+echo ""
+
+# ─── Install dependencies ─────────────────────────
+echo "[2/4] Installing dependencies..."
+cd "$ROOT_DIR"
+npm install --silent
+cd "$ROOT_DIR/worker"
+npm install --silent
+echo "   Dependencies installed."
+echo ""
+
+# ─── Start worker in background ───────────────────
+echo "[3/4] Starting Cloudflare Worker on port 8787..."
+cd "$ROOT_DIR/worker"
+npx wrangler dev --ip 0.0.0.0 --port 8787 2>&1 | sed 's/^/   [worker] /' &
+WORKER_PID=$!
+echo "   Worker started (PID $WORKER_PID)"
+echo ""
+
+sleep 3
+
+# ─── Start frontend ───────────────────────────────
+echo "[4/4] Starting Next.js frontend on port 3000..."
+echo ""
+
+sleep 2 && open "http://localhost:3000" 2>/dev/null &
+
+cd "$ROOT_DIR"
+echo "============================================"
+echo "   Deck is running!"
+echo ""
+echo "   Frontend : http://localhost:3000"
+echo "   Worker   : http://localhost:8787"
+echo ""
+echo "   Press Ctrl+C to stop both servers."
+echo "============================================"
+echo ""
+
+cleanup() {
+  echo ""
+  echo "Shutting down..."
+  kill $WORKER_PID 2>/dev/null || true
+  exit 0
 }
+trap cleanup INT TERM
 
-run_step() {
-  local label="$1"
-  shift
-  printf '%s\n' "${label}"
-  ( "$@" ) || fail "${label} failed"
-  printf '%s\n\n' "   done."
-}
-
-open_terminal_tab() {
-  local title="$1"
-  local working_dir="$2"
-  local cmd="$3"
-
-  if command -v osascript >/dev/null 2>&1; then
-    osascript >/dev/null <<OSA
-tell application "Terminal"
-  activate
-  try
-    set newTab to do script "cd $(printf '%q' "$working_dir") && echo '========== $title ==========' && echo && $cmd"
-  on error
-    do script "cd $(printf '%q' "$working_dir") && echo '========== $title ==========' && echo && $cmd"
-  end try
-end tell
-OSA
-  else
-    printf '%s\n' "osascript not found; starting in current terminal: $title"
-    (cd "$working_dir" && eval "$cmd") &
-  fi
-}
-
-main() {
-  print_header
-
-  printf '%s\n' "[1/5] Clearing ports 3000 and 8787..."
-  kill_port 3000
-  kill_port 8787
-  printf '%s\n\n' "   Ports cleared."
-
-  run_step "[2/5] Installing frontend dependencies..." bash -lc "cd \"$ROOT_DIR\" && npm install"
-  run_step "[3/5] Installing worker dependencies..." bash -lc "cd \"$ROOT_DIR/worker\" && npm install"
-
-  printf '%s\n' "[4/5] Starting Cloudflare Worker (port 8787)..."
-  open_terminal_tab "DECK WORKER (port 8787)" "$ROOT_DIR/worker" "npx wrangler dev"
-
-  sleep 3
-
-  printf '%s\n' "[5/5] Starting Next.js frontend (port 3000)..."
-  open_terminal_tab "DECK FRONTEND (port 3000)" "$ROOT_DIR" "npx next dev"
-
-  printf '\n%s\n' "   Waiting for frontend to start..."
-  sleep 5
-
-  printf '\n%s\n' "   Opening browser..."
-  open "http://localhost:3000" >/dev/null 2>&1 || true
-
-  printf '\n%s\n' "============================================"
-  printf '%s\n' "   Deck is running!"
-  printf '\n%s\n' "   Frontend : http://localhost:3000"
-  printf '%s\n'   "   Worker   : http://localhost:8787"
-  printf '\n%s\n' "   Each server is started in Terminal."
-  printf '%s\n' "============================================"
-}
-
-main "$@"
+npx next dev --port 3000 2>&1 | sed 's/^/   [frontend] /'

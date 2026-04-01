@@ -1,6 +1,48 @@
 export type Suit = 'hearts' | 'diamonds' | 'clubs' | 'spades'
 export type Rank = '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | 'J' | 'Q' | 'K' | 'A'
-export type GameType = 'blackjack' | 'poker'
+export type GameType = 'blackjack' | 'poker' | 'uno'
+
+export type UnoColor = 'red' | 'yellow' | 'green' | 'blue'
+export type UnoCardType = 'number' | 'skip' | 'reverse' | 'draw_two' | 'wild' | 'wild_draw_four'
+
+export interface UnoCard {
+  id: string
+  color: UnoColor | null
+  type: UnoCardType
+  value?: number
+}
+
+export interface UnoPlayerView {
+  id: string
+  displayName: string
+  username: string
+  chips: number
+  isHost: boolean
+  isReady: boolean
+  isConnected: boolean
+  seatIndex: number
+  cards: UnoCard[]
+  cardCount: number
+  score: number
+  hasCalledUno: boolean
+  canBeChallenged: boolean
+}
+
+export interface UnoState {
+  phase: 'playing' | 'complete'
+  players: UnoPlayerView[]
+  currentPlayerIndex: number
+  direction: 1 | -1
+  discardTop: UnoCard
+  currentColor: UnoColor
+  drawPileCount: number
+  hasDrawnThisTurn: boolean
+  pendingDraw: number
+  pendingDrawType: 'draw_two' | 'wild_draw_four' | null
+  lastAction: { playerId: string; action: string; card?: UnoCard } | null
+  winnerId: string | null
+  roundNumber: number
+}
 
 export interface Card {
   suit: Suit

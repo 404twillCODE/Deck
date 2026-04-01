@@ -1,4 +1,4 @@
-import type { BlackjackState, PokerState, Player, TableSettings, Card } from './game'
+import type { BlackjackState, PokerState, UnoState, Player, TableSettings, Card } from './game'
 
 export type ClientMessage =
   | { type: 'join_room'; payload: { roomCode: string; token: string; displayName?: string } }
@@ -15,6 +15,11 @@ export type ClientMessage =
   | { type: 'pk_raise'; payload: { amount: number } }
   | { type: 'pk_check' }
   | { type: 'pk_all_in' }
+  | { type: 'uno_play_card'; payload: { cardId: string; chosenColor?: string } }
+  | { type: 'uno_draw' }
+  | { type: 'uno_call_uno' }
+  | { type: 'uno_challenge_uno'; payload: { targetPlayerId: string } }
+  | { type: 'uno_pass' }
   | { type: 'ping' }
 
 export type ServerMessage =
@@ -33,6 +38,7 @@ export type ServerMessage =
   | { type: 'pk_action'; payload: { playerId: string; action: string; amount?: number } }
   | { type: 'pk_showdown'; payload: PokerState }
   | { type: 'pk_winner'; payload: { playerId: string; amount: number; handRank: string; isSplit?: boolean; winnerIds?: string[] } }
+  | { type: 'uno_state'; payload: UnoState }
   | { type: 'chips_reset'; payload: { startingChips: number } }
   | { type: 'chat'; payload: { playerId: string; username: string; message: string; timestamp: number } }
   | { type: 'error'; payload: { message: string; code?: string } }
@@ -47,5 +53,5 @@ export interface RoomState {
   maxPlayers: number
   isStarted: boolean
   settings: TableSettings
-  gameState?: BlackjackState | PokerState
+  gameState?: BlackjackState | PokerState | UnoState
 }

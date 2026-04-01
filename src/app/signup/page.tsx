@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
 import { createClient } from '@/lib/supabase/client'
-import { AuthCard, AnimatedButton, PremiumInput } from '@/components/ui'
+import { AuthCard, AnimatedButton, PremiumInput, DeckLogo } from '@/components/ui'
 import { useUIStore } from '@/stores/ui-store'
 import { Mail, Lock, User, CheckCircle2 } from 'lucide-react'
 
@@ -68,9 +68,7 @@ export default function SignupPage() {
     <AuthCard>
       <div className="text-center mb-8">
         <Link href="/" className="inline-flex items-center gap-2 mb-6">
-          <div className="w-10 h-10 rounded-xl bg-accent/20 flex items-center justify-center">
-            <span className="text-lg font-bold text-accent-light">D</span>
-          </div>
+          <DeckLogo size="lg" />
         </Link>
         <h1 className="text-2xl font-bold text-text-primary mb-2">Create your account</h1>
         <p className="text-sm text-text-secondary">Start playing in seconds</p>

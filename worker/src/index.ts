@@ -2,6 +2,7 @@ import type { Env } from './types'
 
 export { BlackjackTableDO } from './durable-objects/blackjack-table'
 export { PokerTableDO } from './durable-objects/poker-table'
+export { UnoTableDO } from './durable-objects/uno-table'
 
 const ALLOWED_ORIGINS = new Set([
   'https://deck-mu.vercel.app',
@@ -10,8 +11,29 @@ const ALLOWED_ORIGINS = new Set([
   'http://localhost:5173',
 ])
 
-function corsHeaders(origin: string | null): Record<string, string> {
-  const allowedOrigin = origin && ALLOWED_ORIGINS.has(origin) ? origin : ''
+function isPrivateDevOrigin(origin: string): boolean {
+  try {
+    const u = new URL(origin)
+    const h = u.hostname
+    if (h === 'localhost' || h === '127.0.0.1') return true
+    if (/^192\.168\.\d{1,3}\.\d{1,3}$/.test(h)) return true
+    if (/^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(h)) return true
+    if (/^172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}$/.test(h)) return true
+    return false
+  } catch {
+    return false
+  }
+}
+
+function pickCorsOrigin(origin: string | null, env: Env): string {
+  if (!origin) return ''
+  if (ALLOWED_ORIGINS.has(origin)) return origin
+  if (env.ENVIRONMENT === 'development' && isPrivateDevOrigin(origin)) return origin
+  return ''
+}
+
+function corsHeaders(origin: string | null, env: Env): Record<string, string> {
+  const allowedOrigin = pickCorsOrigin(origin, env)
   return {
     ...(allowedOrigin ? { 'Access-Control-Allow-Origin': allowedOrigin } : {}),
     'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
@@ -21,31 +43,31 @@ function corsHeaders(origin: string | null): Record<string, string> {
   }
 }
 
-function json(request: Request, data: unknown, status = 200): Response {
+function json(request: Request, env: Env, data: unknown, status = 200): Response {
   const origin = request.headers.get('Origin')
   return new Response(JSON.stringify(data), {
     status,
-    headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+    headers: { 'Content-Type': 'application/json', ...corsHeaders(origin, env) },
   })
 }
 
-function withCors(request: Request, response: Response): Response {
+function withCors(request: Request, env: Env, response: Response): Response {
   const origin = request.headers.get('Origin')
   const headers = new Headers(response.headers)
-  for (const [k, v] of Object.entries(corsHeaders(origin))) headers.set(k, v)
+  for (const [k, v] of Object.entries(corsHeaders(origin, env))) headers.set(k, v)
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers })
 }
 
 // In-memory room registry (maps code → gameType). Survives within a single
 // isolate lifetime which is fine for dev; in production rooms are ephemeral anyway.
-const roomRegistry = new Map<string, 'blackjack' | 'poker'>()
+const roomRegistry = new Map<string, 'blackjack' | 'poker' | 'uno'>()
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url)
 
     if (request.method === 'OPTIONS') {
-      return new Response(null, { status: 204, headers: corsHeaders(request.headers.get('Origin')) })
+      return new Response(null, { status: 204, headers: corsHeaders(request.headers.get('Origin'), env) })
     }
 
     // ─── REST: Create Room ────────────────────────────────
@@ -53,7 +75,7 @@ export default {
     if (url.pathname === '/api/rooms' && request.method === 'POST') {
       let body: {
         code?: string
-        gameType?: 'blackjack' | 'poker'
+        gameType?: 'blackjack' | 'poker' | 'uno'
         hostId?: string
         maxPlayers?: number
         startingChips?: number
@@ -63,17 +85,17 @@ export default {
       try {
         body = await request.json()
       } catch {
-        return json(request, { error: 'Invalid JSON body' }, 400)
+        return json(request, env, { error: 'Invalid JSON body' }, 400)
       }
 
       if (!body.code || !body.gameType) {
-        return json(request, { error: 'Missing required fields: code, gameType' }, 400)
+        return json(request, env, { error: 'Missing required fields: code, gameType' }, 400)
       }
 
       const hostId = body.hostId || 'pending'
 
       try {
-        const namespace = body.gameType === 'poker' ? env.POKER_TABLE : env.BLACKJACK_TABLE
+        const namespace = body.gameType === 'poker' ? env.POKER_TABLE : body.gameType === 'uno' ? env.UNO_TABLE : env.BLACKJACK_TABLE
         const id = namespace.idFromName(body.code)
         const stub = namespace.get(id)
 
@@ -93,12 +115,12 @@ export default {
         }))
 
         if (!initResponse.ok) {
-          return json(request, { error: 'Failed to initialize room' }, 500)
+          return json(request, env, { error: 'Failed to initialize room' }, 500)
         }
 
         roomRegistry.set(body.code, body.gameType)
 
-        return json(request, {
+        return json(request, env, {
           success: true,
           room: {
             code: body.code,
@@ -107,7 +129,7 @@ export default {
           },
         })
       } catch (err) {
-        return json(request, { error: 'Room initialization failed', detail: String(err) }, 500)
+        return json(request, env, { error: 'Room initialization failed', detail: String(err) }, 500)
       }
     }
 
@@ -118,12 +140,12 @@ export default {
       const code = roomLookupMatch[1]
       const gameType = roomRegistry.get(code)
       if (gameType) {
-        return json(request, { code, gameType })
+        return json(request, env, { code, gameType })
       }
       // Room not in registry — could have been created in a different isolate.
       // Try both DOs by querying their /info endpoint.
-      for (const type of ['blackjack', 'poker'] as const) {
-        const ns = type === 'poker' ? env.POKER_TABLE : env.BLACKJACK_TABLE
+      for (const type of ['blackjack', 'poker', 'uno'] as const) {
+        const ns = type === 'poker' ? env.POKER_TABLE : type === 'uno' ? env.UNO_TABLE : env.BLACKJACK_TABLE
         const id = ns.idFromName(code)
         const stub = ns.get(id)
         try {
@@ -132,18 +154,18 @@ export default {
             const info = await res.json() as { active: boolean; gameType: string }
             if (info.active) {
               roomRegistry.set(code, type)
-              return json(request, { code, gameType: type })
+              return json(request, env, { code, gameType: type })
             }
           }
         } catch { /* ignore */ }
       }
-      return json(request, { error: 'Room not found' }, 404)
+      return json(request, env, { error: 'Room not found' }, 404)
     }
 
     // ─── REST: Health ─────────────────────────────────────
 
     if (url.pathname === '/api/health') {
-      return json(request, { status: 'ok', timestamp: Date.now() })
+      return json(request, env, { status: 'ok', timestamp: Date.now() })
     }
 
     // ─── WebSocket: Room Connection ───────────────────────
@@ -152,14 +174,14 @@ export default {
     if (wsMatch) {
       const upgradeHeader = request.headers.get('Upgrade')
       if (!upgradeHeader || upgradeHeader.toLowerCase() !== 'websocket') {
-        return withCors(request, new Response('Expected WebSocket upgrade', { status: 426 }))
+        return withCors(request, env, new Response('Expected WebSocket upgrade', { status: 426 }))
       }
 
       const roomCode = wsMatch[1].toUpperCase()
       const gameType = url.searchParams.get('game') || roomRegistry.get(roomCode) || 'blackjack'
-      roomRegistry.set(roomCode, gameType as 'blackjack' | 'poker')
+      roomRegistry.set(roomCode, gameType as 'blackjack' | 'poker' | 'uno')
 
-      const namespace = gameType === 'poker' ? env.POKER_TABLE : env.BLACKJACK_TABLE
+      const namespace = gameType === 'poker' ? env.POKER_TABLE : gameType === 'uno' ? env.UNO_TABLE : env.BLACKJACK_TABLE
       const id = namespace.idFromName(roomCode)
       const stub = namespace.get(id)
 
@@ -170,6 +192,6 @@ export default {
 
     // ─── Fallback ─────────────────────────────────────────
 
-    return json(request, { error: 'Not found' }, 404)
+    return json(request, env, { error: 'Not found' }, 404)
   },
 }

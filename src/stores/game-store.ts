@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { RoomState, BlackjackState, PokerState, Player } from '@/types'
+import type { RoomState, BlackjackState, PokerState, UnoState, Player } from '@/types'
 
 interface GameStore {
   roomState: RoomState | null
@@ -8,7 +8,7 @@ interface GameStore {
   connectionError: string | null
   
   setRoomState: (state: RoomState | null) => void
-  updateGameState: (gameState: BlackjackState | PokerState) => void
+  updateGameState: (gameState: BlackjackState | PokerState | UnoState) => void
   addPlayer: (player: Player) => void
   removePlayer: (playerId: string) => void
   setPlayerReady: (playerId: string) => void

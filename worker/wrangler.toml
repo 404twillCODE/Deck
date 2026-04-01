@@ -5,12 +5,17 @@ compatibility_date = "2025-03-15"
 [durable_objects]
 bindings = [
   { name = "BLACKJACK_TABLE", class_name = "BlackjackTableDO" },
-  { name = "POKER_TABLE", class_name = "PokerTableDO" }
+  { name = "POKER_TABLE", class_name = "PokerTableDO" },
+  { name = "UNO_TABLE", class_name = "UnoTableDO" }
 ]
 
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["BlackjackTableDO", "PokerTableDO"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["UnoTableDO"]
 
 [vars]
 ENVIRONMENT = "development"

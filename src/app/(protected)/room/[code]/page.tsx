@@ -16,6 +16,7 @@ import {
 } from '@/components/ui'
 import { BlackjackTable } from '@/components/game/blackjack-table'
 import { PokerTable } from '@/components/game/poker-table'
+import { UnoTable } from '@/components/game/uno-table'
 import { ArrowLeft, Copy, Users, Play, Loader2, RefreshCw } from 'lucide-react'
 import Link from 'next/link'
 import type { ServerMessage, RoomState } from '@/types'
@@ -50,13 +51,19 @@ function RoomContent() {
       const supabase = createClient()
       const { data: { session } } = await supabase.auth.getSession()
       const token = session?.access_token || ''
-      const displayName = user?.display_name || 'Player'
+      const displayName =
+        user?.display_name?.trim() ||
+        user?.username?.trim() ||
+        'Player'
 
       let workerUrl = process.env.NEXT_PUBLIC_WORKER_URL || 'http://localhost:8787'
       if (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
         workerUrl = workerUrl.replace('localhost', window.location.hostname).replace('127.0.0.1', window.location.hostname)
       }
-      const wsUrl = workerUrl.replace(/^http/, 'ws') + `/ws/room/${code}?game=${gameTypeParam}`
+      const u = new URL(workerUrl)
+      const wsProto = u.protocol === 'https:' ? 'wss:' : 'ws:'
+      const pathPrefix = u.pathname === '/' ? '' : u.pathname.replace(/\/$/, '')
+      const wsUrl = `${wsProto}//${u.host}${pathPrefix}/ws/room/${code}?game=${encodeURIComponent(gameTypeParam)}`
 
       await ws.connect(wsUrl, token, code, displayName)
     } catch {
@@ -65,7 +72,7 @@ function RoomContent() {
         setConnStatus('failed')
       }
     }
-  }, [code, gameTypeParam, user?.display_name, setConnectionError])
+  }, [code, gameTypeParam, user?.display_name, user?.username, setConnectionError])
 
   useEffect(() => {
     mountedRef.current = true
@@ -101,6 +108,9 @@ function RoomContent() {
           break
         case 'pk_state':
         case 'pk_showdown':
+          updateGameState(message.payload)
+          break
+        case 'uno_state':
           updateGameState(message.payload)
           break
         case 'chips_reset':
@@ -184,6 +194,7 @@ function RoomContent() {
         }
         case 'bj_state': case 'bj_round_result': updateGameState(message.payload); break
         case 'pk_state': case 'pk_showdown': updateGameState(message.payload); break
+        case 'uno_state': updateGameState(message.payload); break
         case 'chips_reset':
           addToast({ type: 'info', title: 'Chips Reset', message: `Everyone reset to ${message.payload.startingChips.toLocaleString()} chips.` })
           break
@@ -241,11 +252,9 @@ function RoomContent() {
   }
 
   if (roomState?.isStarted && roomState.gameState) {
-    return roomState.gameType === 'blackjack' ? (
-      <BlackjackTable wsRef={wsRef} />
-    ) : (
-      <PokerTable wsRef={wsRef} />
-    )
+    if (roomState.gameType === 'blackjack') return <BlackjackTable wsRef={wsRef} />
+    if (roomState.gameType === 'poker') return <PokerTable wsRef={wsRef} />
+    if (roomState.gameType === 'uno') return <UnoTable wsRef={wsRef} />
   }
 
   return (
@@ -280,7 +289,11 @@ function RoomContent() {
         >
           <div className="text-center">
             <h1 className="text-2xl font-bold text-gradient mb-2">
-              {(roomState?.gameType || gameTypeParam) === 'poker' ? 'Poker Table' : 'Blackjack Table'}
+              {(roomState?.gameType || gameTypeParam) === 'poker'
+                ? 'Poker Table'
+                : (roomState?.gameType || gameTypeParam) === 'uno'
+                  ? 'Uno Table'
+                  : 'Blackjack Table'}
             </h1>
             <p className="text-text-secondary">
               Waiting for players... Share the room code to invite friends.

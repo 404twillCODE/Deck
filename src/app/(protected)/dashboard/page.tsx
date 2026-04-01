@@ -12,6 +12,7 @@ import {
   GlassPanel,
   GameCard,
   Skeleton,
+  DeckLogo,
 } from '@/components/ui'
 import {
   LogOut,
@@ -19,6 +20,7 @@ import {
   Hash,
   Spade,
   CircleDot,
+  Palette,
   Settings,
   User,
   ChevronRight,
@@ -120,9 +122,7 @@ export default function DashboardPage() {
       <header className="sticky top-0 z-40 glass border-b border-white/[0.04]">
         <div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
           <Link href="/dashboard" className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-accent/20 flex items-center justify-center">
-              <span className="text-sm font-bold text-accent-light">D</span>
-            </div>
+            <DeckLogo />
             <span className="text-lg font-semibold text-text-primary hidden sm:block">Deck</span>
           </Link>
           <ProfileChip />
@@ -155,7 +155,7 @@ export default function DashboardPage() {
                 <Plus className="h-4 w-4" />
                 Create a Table
               </h3>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <AnimatedButton
                   variant="secondary"
                   className="justify-start"
@@ -171,6 +171,14 @@ export default function DashboardPage() {
                 >
                   <Spade className="h-4 w-4 text-accent-light" />
                   Poker
+                </AnimatedButton>
+                <AnimatedButton
+                  variant="secondary"
+                  className="justify-start"
+                  onClick={() => router.push('/room/create?game=uno')}
+                >
+                  <Palette className="h-4 w-4 text-red-400" />
+                  Uno
                 </AnimatedButton>
               </div>
             </GlassPanel>
@@ -197,7 +205,7 @@ export default function DashboardPage() {
           {/* Game Selection */}
           <motion.div variants={item}>
             <h2 className="text-lg font-semibold text-text-primary mb-4">Games</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <GameCard
                 gameType="blackjack"
                 title="Blackjack"
@@ -213,6 +221,14 @@ export default function DashboardPage() {
                 icon={<Spade className="h-6 w-6" />}
                 playerCount="2-9 players"
                 onClick={() => router.push('/room/create?game=poker')}
+              />
+              <GameCard
+                gameType="uno"
+                title="Uno"
+                description="Classic color-matching. Play action cards and race to empty your hand."
+                icon={<Palette className="h-6 w-6" />}
+                playerCount="2-10 players"
+                onClick={() => router.push('/room/create?game=uno')}
               />
             </div>
           </motion.div>

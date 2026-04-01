@@ -7,7 +7,7 @@ import { AnimatedButton, GlassPanel, PremiumInput } from '@/components/ui'
 import { useUIStore } from '@/stores/ui-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { generateRoomCode } from '@/lib/utils'
-import { ArrowLeft, CircleDot, Spade, Users, Coins } from 'lucide-react'
+import { ArrowLeft, CircleDot, Spade, Palette, Users, Coins, Layers, Trophy, CreditCard } from 'lucide-react'
 import Link from 'next/link'
 import type { GameType } from '@/types'
 
@@ -19,9 +19,21 @@ function CreateRoomContent() {
 
   const initialGame = (searchParams.get('game') as GameType) || 'blackjack'
   const [gameType, setGameType] = useState<GameType>(initialGame)
-  const [maxPlayers, setMaxPlayers] = useState(gameType === 'poker' ? '6' : '5')
+  const [maxPlayers, setMaxPlayers] = useState(
+    initialGame === 'poker' ? '6' : initialGame === 'uno' ? '4' : '5',
+  )
   const [startingChips, setStartingChips] = useState('10000')
-  const [minimumBet, setMinimumBet] = useState(gameType === 'poker' ? '100' : '50')
+  const [minimumBet, setMinimumBet] = useState(initialGame === 'poker' ? '100' : '50')
+  const [cardsPerPlayer, setCardsPerPlayer] = useState('7')
+  const [scoreToWin, setScoreToWin] = useState('500')
+  const [deckCount, setDeckCount] = useState(initialGame === 'blackjack' ? '6' : '1')
+
+  function selectGame(type: GameType) {
+    setGameType(type)
+    if (type === 'blackjack') { setMaxPlayers('5'); setMinimumBet('50'); setStartingChips('10000'); setDeckCount('6') }
+    if (type === 'poker') { setMaxPlayers('6'); setMinimumBet('100'); setStartingChips('10000'); setDeckCount('1') }
+    if (type === 'uno') { setMaxPlayers('4'); setCardsPerPlayer('7'); setScoreToWin('500') }
+  }
   const [creating, setCreating] = useState(false)
 
   async function handleCreate() {
@@ -37,17 +49,29 @@ function CreateRoomContent() {
       if (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
         workerUrl = workerUrl.replace('localhost', window.location.hostname).replace('127.0.0.1', window.location.hostname)
       }
+      const settings: Record<string, unknown> = {
+        code,
+        gameType,
+        hostId,
+        maxPlayers: parseInt(maxPlayers),
+      }
+
+      if (gameType === 'blackjack') {
+        settings.startingChips = parseInt(startingChips)
+        settings.minimumBet = parseInt(minimumBet)
+        settings.deckCount = parseInt(deckCount)
+      } else if (gameType === 'poker') {
+        settings.startingChips = parseInt(startingChips)
+        settings.minimumBet = parseInt(minimumBet)
+      } else if (gameType === 'uno') {
+        settings.cardsPerPlayer = parseInt(cardsPerPlayer)
+        settings.scoreToWin = parseInt(scoreToWin)
+      }
+
       const response = await fetch(`${workerUrl}/api/rooms`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          code,
-          gameType,
-          hostId,
-          maxPlayers: parseInt(maxPlayers),
-          startingChips: parseInt(startingChips),
-          minimumBet: parseInt(minimumBet),
-        }),
+        body: JSON.stringify(settings),
       })
 
       if (!response.ok) {
@@ -83,14 +107,14 @@ function CreateRoomContent() {
         >
           <GlassPanel className="p-6">
             <h3 className="text-sm font-medium text-text-secondary mb-4">Game</h3>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
               <button
                 className={`flex items-center gap-3 p-4 rounded-xl border transition-all ${
                   gameType === 'blackjack'
                     ? 'border-accent/50 bg-accent/5 shadow-[0_0_20px_rgba(99,102,241,0.08)]'
                     : 'border-white/[0.06] hover:border-white/[0.1] bg-white/[0.02]'
                 }`}
-                onClick={() => { setGameType('blackjack'); setMaxPlayers('5'); setMinimumBet('50') }}
+                onClick={() => selectGame('blackjack')}
               >
                 <CircleDot className={`h-5 w-5 ${gameType === 'blackjack' ? 'text-emerald-400' : 'text-text-tertiary'}`} />
                 <div className="text-left">
@@ -104,7 +128,7 @@ function CreateRoomContent() {
                     ? 'border-accent/50 bg-accent/5 shadow-[0_0_20px_rgba(99,102,241,0.08)]'
                     : 'border-white/[0.06] hover:border-white/[0.1] bg-white/[0.02]'
                 }`}
-                onClick={() => { setGameType('poker'); setMaxPlayers('6'); setMinimumBet('100') }}
+                onClick={() => selectGame('poker')}
               >
                 <Spade className={`h-5 w-5 ${gameType === 'poker' ? 'text-accent-light' : 'text-text-tertiary'}`} />
                 <div className="text-left">
@@ -112,11 +136,27 @@ function CreateRoomContent() {
                   <p className="text-xs text-text-tertiary">2-9 players</p>
                 </div>
               </button>
+              <button
+                className={`flex items-center gap-3 p-4 rounded-xl border transition-all ${
+                  gameType === 'uno'
+                    ? 'border-accent/50 bg-accent/5 shadow-[0_0_20px_rgba(99,102,241,0.08)]'
+                    : 'border-white/[0.06] hover:border-white/[0.1] bg-white/[0.02]'
+                }`}
+                onClick={() => selectGame('uno')}
+              >
+                <Palette className={`h-5 w-5 ${gameType === 'uno' ? 'text-red-400' : 'text-text-tertiary'}`} />
+                <div className="text-left">
+                  <p className="text-sm font-medium text-text-primary">Uno</p>
+                  <p className="text-xs text-text-tertiary">2-10 players</p>
+                </div>
+              </button>
             </div>
           </GlassPanel>
 
           <GlassPanel className="p-6 space-y-4">
             <h3 className="text-sm font-medium text-text-secondary mb-2">Settings</h3>
+
+            {/* Shared: Max Players */}
             <PremiumInput
               label="Max Players"
               type="number"
@@ -124,26 +164,89 @@ function CreateRoomContent() {
               onChange={(e) => setMaxPlayers(e.target.value)}
               icon={<Users className="h-4 w-4" />}
               min={2}
-              max={gameType === 'poker' ? 9 : 7}
+              max={gameType === 'poker' ? 9 : gameType === 'uno' ? 10 : 7}
             />
-            <PremiumInput
-              label="Starting Chips"
-              type="number"
-              value={startingChips}
-              onChange={(e) => setStartingChips(e.target.value)}
-              icon={<Coins className="h-4 w-4" />}
-              min={100}
-              step={100}
-            />
-            <PremiumInput
-              label={gameType === 'poker' ? 'Big Blind' : 'Minimum Bet'}
-              type="number"
-              value={minimumBet}
-              onChange={(e) => setMinimumBet(e.target.value)}
-              icon={<Coins className="h-4 w-4" />}
-              min={10}
-              step={10}
-            />
+
+            {/* Blackjack settings */}
+            {gameType === 'blackjack' && (
+              <>
+                <PremiumInput
+                  label="Starting Chips"
+                  type="number"
+                  value={startingChips}
+                  onChange={(e) => setStartingChips(e.target.value)}
+                  icon={<Coins className="h-4 w-4" />}
+                  min={100}
+                  step={100}
+                />
+                <PremiumInput
+                  label="Minimum Bet"
+                  type="number"
+                  value={minimumBet}
+                  onChange={(e) => setMinimumBet(e.target.value)}
+                  icon={<CreditCard className="h-4 w-4" />}
+                  min={10}
+                  step={10}
+                />
+                <PremiumInput
+                  label="Number of Decks"
+                  type="number"
+                  value={deckCount}
+                  onChange={(e) => setDeckCount(e.target.value)}
+                  icon={<Layers className="h-4 w-4" />}
+                  min={1}
+                  max={8}
+                />
+              </>
+            )}
+
+            {/* Poker settings */}
+            {gameType === 'poker' && (
+              <>
+                <PremiumInput
+                  label="Starting Chips"
+                  type="number"
+                  value={startingChips}
+                  onChange={(e) => setStartingChips(e.target.value)}
+                  icon={<Coins className="h-4 w-4" />}
+                  min={100}
+                  step={100}
+                />
+                <PremiumInput
+                  label="Big Blind"
+                  type="number"
+                  value={minimumBet}
+                  onChange={(e) => setMinimumBet(e.target.value)}
+                  icon={<CreditCard className="h-4 w-4" />}
+                  min={10}
+                  step={10}
+                />
+              </>
+            )}
+
+            {/* Uno settings */}
+            {gameType === 'uno' && (
+              <>
+                <PremiumInput
+                  label="Cards Per Player"
+                  type="number"
+                  value={cardsPerPlayer}
+                  onChange={(e) => setCardsPerPlayer(e.target.value)}
+                  icon={<Layers className="h-4 w-4" />}
+                  min={5}
+                  max={10}
+                />
+                <PremiumInput
+                  label="Score to Win"
+                  type="number"
+                  value={scoreToWin}
+                  onChange={(e) => setScoreToWin(e.target.value)}
+                  icon={<Trophy className="h-4 w-4" />}
+                  min={100}
+                  step={50}
+                />
+              </>
+            )}
           </GlassPanel>
 
           <AnimatedButton
