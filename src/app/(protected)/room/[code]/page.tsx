@@ -17,9 +17,40 @@ import {
 import { BlackjackTable } from '@/components/game/blackjack-table'
 import { PokerTable } from '@/components/game/poker-table'
 import { UnoTable } from '@/components/game/uno-table'
+import { HotPotatoTable } from '@/components/game/hot-potato-table'
 import { ArrowLeft, Copy, Users, Play, Loader2, RefreshCw } from 'lucide-react'
 import Link from 'next/link'
+import { recordGameResult } from '@/lib/stats'
 import type { ServerMessage, RoomState } from '@/types'
+
+function useStatsRecorder() {
+  const roomState = useGameStore((s) => s.roomState)
+  const { user, isGuest } = useAuthStore()
+  const recordedRef = useRef<string>('')
+
+  useEffect(() => {
+    if (!roomState?.gameState || !user || isGuest) return
+
+    const gs = roomState.gameState
+    const gameType = roomState.gameType
+    let isComplete = false
+    let winnerId: string | null = null
+
+    if ('phase' in gs && gs.phase === 'complete') {
+      isComplete = true
+      if ('winnerId' in gs) winnerId = gs.winnerId as string | null
+    }
+
+    if (!isComplete) return
+
+    const roundKey = `${gameType}-${('roundNumber' in gs ? gs.roundNumber : 0)}`
+    if (recordedRef.current === roundKey) return
+    recordedRef.current = roundKey
+
+    const won = winnerId === user.id
+    recordGameResult(user.id, gameType, won).catch(() => {})
+  }, [roomState?.gameState, roomState?.gameType, user, isGuest])
+}
 
 function RoomContent() {
   const params = useParams()
@@ -30,6 +61,7 @@ function RoomContent() {
 
   const { user } = useAuthStore()
   const addToast = useUIStore((s) => s.addToast)
+  useStatsRecorder()
 
   const roomState = useGameStore((s) => s.roomState)
   const isConnected = useGameStore((s) => s.isConnected)
@@ -111,6 +143,7 @@ function RoomContent() {
           updateGameState(message.payload)
           break
         case 'uno_state':
+        case 'hp_state':
           updateGameState(message.payload)
           break
         case 'chips_reset':
@@ -118,7 +151,7 @@ function RoomContent() {
           break
         case 'error':
           if (message.payload.code === 'ROOM_NOT_FOUND') {
-            router.push('/dashboard')
+            router.push('/')
           }
           break
         case 'pong':
@@ -194,12 +227,12 @@ function RoomContent() {
         }
         case 'bj_state': case 'bj_round_result': updateGameState(message.payload); break
         case 'pk_state': case 'pk_showdown': updateGameState(message.payload); break
-        case 'uno_state': updateGameState(message.payload); break
+        case 'uno_state': case 'hp_state': updateGameState(message.payload); break
         case 'chips_reset':
           addToast({ type: 'info', title: 'Chips Reset', message: `Everyone reset to ${message.payload.startingChips.toLocaleString()} chips.` })
           break
         case 'error':
-          if (message.payload.code === 'ROOM_NOT_FOUND') router.push('/dashboard')
+          if (message.payload.code === 'ROOM_NOT_FOUND') router.push('/')
           break
       }
     })
@@ -235,9 +268,7 @@ function RoomContent() {
                   <RefreshCw className="h-4 w-4" />
                   Retry
                 </AnimatedButton>
-                <Link href="/dashboard">
-                  <AnimatedButton variant="ghost">Back to Lobby</AnimatedButton>
-                </Link>
+                <AnimatedButton href="/" variant="ghost">Back Home</AnimatedButton>
               </div>
             </>
           ) : (
@@ -255,6 +286,7 @@ function RoomContent() {
     if (roomState.gameType === 'blackjack') return <BlackjackTable wsRef={wsRef} />
     if (roomState.gameType === 'poker') return <PokerTable wsRef={wsRef} />
     if (roomState.gameType === 'uno') return <UnoTable wsRef={wsRef} />
+    if (roomState.gameType === 'hot-potato') return <HotPotatoTable wsRef={wsRef} />
   }
 
   return (
@@ -272,7 +304,7 @@ function RoomContent() {
       <header className="sticky top-0 z-40 glass border-b border-white/[0.04]">
         <div className="max-w-3xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Link href="/dashboard" className="p-2 rounded-lg hover:bg-white/[0.04] transition-colors text-text-secondary">
+            <Link href="/" className="p-2 rounded-lg hover:bg-white/[0.04] transition-colors text-text-secondary">
               <ArrowLeft className="h-5 w-5" />
             </Link>
             <RoomCodeBadge code={code} />
@@ -293,7 +325,9 @@ function RoomContent() {
                 ? 'Poker Table'
                 : (roomState?.gameType || gameTypeParam) === 'uno'
                   ? 'Uno Table'
-                  : 'Blackjack Table'}
+                  : (roomState?.gameType || gameTypeParam) === 'hot-potato'
+                    ? 'Hot Potato'
+                    : 'Blackjack Table'}
             </h1>
             <p className="text-text-secondary">
               Waiting for players... Share the room code to invite friends.

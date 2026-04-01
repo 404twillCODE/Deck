@@ -7,7 +7,7 @@ import { AnimatedButton, GlassPanel, PremiumInput } from '@/components/ui'
 import { useUIStore } from '@/stores/ui-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { generateRoomCode } from '@/lib/utils'
-import { ArrowLeft, CircleDot, Spade, Palette, Users, Coins, Layers, Trophy, CreditCard } from 'lucide-react'
+import { ArrowLeft, CircleDot, Spade, Palette, Flame, Users, Coins, Layers, Trophy, CreditCard } from 'lucide-react'
 import Link from 'next/link'
 import type { GameType } from '@/types'
 
@@ -15,12 +15,29 @@ function CreateRoomContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { addToast } = useUIStore()
-  const { user } = useAuthStore()
+  const { user, isGuest } = useAuthStore()
+
+  if (isGuest) {
+    return (
+      <div className="min-h-dvh flex items-center justify-center px-4">
+        <GlassPanel className="p-8 text-center max-w-sm space-y-4">
+          <h2 className="text-xl font-bold text-text-primary">Guests can&apos;t host</h2>
+          <p className="text-sm text-text-secondary">
+            Create an account to host your own game rooms. You can still join games with a room code.
+          </p>
+          <div className="flex gap-3 justify-center pt-2">
+            <AnimatedButton href="/signup">Sign Up</AnimatedButton>
+            <AnimatedButton href="/" variant="ghost">Back</AnimatedButton>
+          </div>
+        </GlassPanel>
+      </div>
+    )
+  }
 
   const initialGame = (searchParams.get('game') as GameType) || 'blackjack'
   const [gameType, setGameType] = useState<GameType>(initialGame)
   const [maxPlayers, setMaxPlayers] = useState(
-    initialGame === 'poker' ? '6' : initialGame === 'uno' ? '4' : '5',
+    initialGame === 'poker' ? '6' : initialGame === 'uno' ? '4' : initialGame === 'hot-potato' ? '8' : '5',
   )
   const [startingChips, setStartingChips] = useState('10000')
   const [minimumBet, setMinimumBet] = useState(initialGame === 'poker' ? '100' : '50')
@@ -33,6 +50,7 @@ function CreateRoomContent() {
     if (type === 'blackjack') { setMaxPlayers('5'); setMinimumBet('50'); setStartingChips('10000'); setDeckCount('6') }
     if (type === 'poker') { setMaxPlayers('6'); setMinimumBet('100'); setStartingChips('10000'); setDeckCount('1') }
     if (type === 'uno') { setMaxPlayers('4'); setCardsPerPlayer('7'); setScoreToWin('500') }
+    if (type === 'hot-potato') { setMaxPlayers('8') }
   }
   const [creating, setCreating] = useState(false)
 
@@ -66,6 +84,8 @@ function CreateRoomContent() {
       } else if (gameType === 'uno') {
         settings.cardsPerPlayer = parseInt(cardsPerPlayer)
         settings.scoreToWin = parseInt(scoreToWin)
+      } else if (gameType === 'hot-potato') {
+        settings.startingChips = 0
       }
 
       const response = await fetch(`${workerUrl}/api/rooms`, {
@@ -91,7 +111,7 @@ function CreateRoomContent() {
     <div className="min-h-dvh">
       <header className="sticky top-0 z-40 glass border-b border-white/[0.04]">
         <div className="max-w-2xl mx-auto px-4 h-16 flex items-center gap-4">
-          <Link href="/dashboard" className="p-2 rounded-lg hover:bg-white/[0.04] transition-colors text-text-secondary">
+          <Link href="/" className="p-2 rounded-lg hover:bg-white/[0.04] transition-colors text-text-secondary">
             <ArrowLeft className="h-5 w-5" />
           </Link>
           <h1 className="text-lg font-semibold text-text-primary">Create Table</h1>
@@ -107,7 +127,7 @@ function CreateRoomContent() {
         >
           <GlassPanel className="p-6">
             <h3 className="text-sm font-medium text-text-secondary mb-4">Game</h3>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <button
                 className={`flex items-center gap-3 p-4 rounded-xl border transition-all ${
                   gameType === 'blackjack'
@@ -150,6 +170,20 @@ function CreateRoomContent() {
                   <p className="text-xs text-text-tertiary">2-10 players</p>
                 </div>
               </button>
+              <button
+                className={`flex items-center gap-3 p-4 rounded-xl border transition-all ${
+                  gameType === 'hot-potato'
+                    ? 'border-accent/50 bg-accent/5 shadow-[0_0_20px_rgba(99,102,241,0.08)]'
+                    : 'border-white/[0.06] hover:border-white/[0.1] bg-white/[0.02]'
+                }`}
+                onClick={() => selectGame('hot-potato')}
+              >
+                <Flame className={`h-5 w-5 ${gameType === 'hot-potato' ? 'text-orange-400' : 'text-text-tertiary'}`} />
+                <div className="text-left">
+                  <p className="text-sm font-medium text-text-primary">Hot Potato</p>
+                  <p className="text-xs text-text-tertiary">3-10 players</p>
+                </div>
+              </button>
             </div>
           </GlassPanel>
 
@@ -163,8 +197,8 @@ function CreateRoomContent() {
               value={maxPlayers}
               onChange={(e) => setMaxPlayers(e.target.value)}
               icon={<Users className="h-4 w-4" />}
-              min={2}
-              max={gameType === 'poker' ? 9 : gameType === 'uno' ? 10 : 7}
+              min={gameType === 'hot-potato' ? 3 : 2}
+              max={gameType === 'poker' ? 9 : gameType === 'uno' || gameType === 'hot-potato' ? 10 : 7}
             />
 
             {/* Blackjack settings */}

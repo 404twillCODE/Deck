@@ -7,6 +7,7 @@ import { motion } from 'framer-motion'
 import { createClient } from '@/lib/supabase/client'
 import { AuthCard, AnimatedButton, PremiumInput, DeckLogo } from '@/components/ui'
 import { useUIStore } from '@/stores/ui-store'
+import { enableGuestMode } from '@/lib/guest'
 import { Mail, Lock, User, CheckCircle2 } from 'lucide-react'
 
 export default function SignupPage() {
@@ -37,31 +38,40 @@ export default function SignupPage() {
     if (!validate()) return
 
     setLoading(true)
-    const supabase = createClient()
+    try {
+      const supabase = createClient()
 
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { display_name: displayName.trim() },
-        emailRedirectTo: `${window.location.origin}/dashboard`,
-      },
-    })
+      const { data, error } = await Promise.race([
+        supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: { display_name: displayName.trim() },
+            emailRedirectTo: `${window.location.origin}/`,
+          },
+        }),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Request timed out — check your connection and try again.')), 15_000)
+        ),
+      ])
 
-    if (error) {
-      addToast({ type: 'error', title: 'Signup failed', message: error.message })
+      if (error) {
+        addToast({ type: 'error', title: 'Signup failed', message: error.message })
+        return
+      }
+
+      if (data.user && !data.session) {
+        setSuccess(true)
+        addToast({ type: 'info', title: 'Confirm your email', message: 'Check your inbox and click the link to activate your account.' })
+      } else if (data.session) {
+        addToast({ type: 'success', title: 'Account created!' })
+        router.push('/')
+      }
+    } catch (err) {
+      addToast({ type: 'error', title: 'Signup failed', message: err instanceof Error ? err.message : 'Something went wrong' })
+    } finally {
       setLoading(false)
-      return
     }
-
-    if (data.user && !data.session) {
-      setSuccess(true)
-    } else {
-      addToast({ type: 'success', title: 'Account created!' })
-      router.push('/dashboard')
-    }
-
-    setLoading(false)
   }
 
   return (
@@ -135,6 +145,15 @@ export default function SignupPage() {
           Sign in
         </Link>
       </p>
+
+      <div className="mt-4 pt-4 border-t border-white/[0.06]">
+        <button
+          onClick={() => { enableGuestMode(); router.push('/') }}
+          className="w-full text-center text-sm text-text-tertiary hover:text-text-secondary transition-colors py-2"
+        >
+          Skip for now — play as guest
+        </button>
+      </div>
     </AuthCard>
   )
 }

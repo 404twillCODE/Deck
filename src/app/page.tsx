@@ -1,11 +1,15 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { motion, useScroll, useTransform, AnimatePresence } from 'framer-motion'
 import { useRef } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { AnimatedButton, DeckLogo } from '@/components/ui'
-import { ArrowRight, Users, Shield, Zap, Sparkles, Search } from 'lucide-react'
+import { ArrowRight, Users, Shield, Zap, Sparkles, Search, Loader2 } from 'lucide-react'
+import { enableGuestMode, isGuestMode } from '@/lib/guest'
+import { generateRoomCode } from '@/lib/utils'
+import { useAuthStore } from '@/stores/auth-store'
 
 function FloatingCard({ suit, rank, className, delay }: { suit: string; rank: string; className?: string; delay?: number }) {
   const isRedSuit = suit === '♥' || suit === '♦'
@@ -63,6 +67,47 @@ function FloatingCard({ suit, rank, className, delay }: { suit: string; rank: st
 }
 
 function HeroSection() {
+  const router = useRouter()
+  const { user, isGuest } = useAuthStore()
+  const isSignedIn = !!user || isGuest
+  const [joinOpen, setJoinOpen] = useState(false)
+  const [roomCode, setRoomCode] = useState('')
+  const [joining, setJoining] = useState(false)
+
+  function handleGetStarted() {
+    if (isSignedIn) {
+      document.getElementById('game-library')?.scrollIntoView({ behavior: 'smooth' })
+    } else {
+      router.push('/signup')
+    }
+  }
+
+  async function handleJoin() {
+    const code = roomCode.trim().toUpperCase()
+    if (!code || code.length < 4) return
+    setJoining(true)
+
+    if (!isGuestMode()) {
+      enableGuestMode()
+    }
+
+    try {
+      let workerUrl = process.env.NEXT_PUBLIC_WORKER_URL || 'http://localhost:8787'
+      if (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+        workerUrl = workerUrl.replace('localhost', window.location.hostname).replace('127.0.0.1', window.location.hostname)
+      }
+      const res = await fetch(`${workerUrl}/api/rooms/${code}`)
+      if (res.ok) {
+        const data = await res.json() as { gameType: string }
+        router.push(`/room/${code}?game=${data.gameType}`)
+      } else {
+        router.push(`/room/${code}?game=blackjack`)
+      }
+    } catch {
+      router.push(`/room/${code}?game=blackjack`)
+    }
+  }
+
   return (
     <section className="relative min-h-dvh flex items-center justify-center overflow-hidden px-4">
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(99,102,241,0.12),transparent_60%)]" />
@@ -93,7 +138,7 @@ function HeroSection() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, delay: 0.2 }}
         >
-          <span className="text-gradient">Your table</span>
+          <span className="text-gradient">Your deck</span>
           <br />
           <span className="text-gradient-accent">is waiting.</span>
         </motion.h1>
@@ -104,27 +149,59 @@ function HeroSection() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, delay: 0.4 }}
         >
-          Your favorite card games, all in one place. Create a room, share the code, and start playing in seconds.
+          Your favorite classic and casino games, all in one place. Create a room, share the code, and start playing in seconds.
         </motion.p>
 
         <motion.div
-          className="flex flex-col sm:flex-row items-center justify-center gap-4 pointer-events-auto"
+          className="flex flex-col items-center gap-4 pointer-events-auto"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, delay: 0.6 }}
         >
-          <Link href="/signup">
-            <AnimatedButton size="lg" className="min-w-[180px]">
-              Get Started
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+            <AnimatedButton size="lg" className="min-w-[180px]" onClick={handleGetStarted}>
+              {isSignedIn ? 'Browse Games' : 'Get Started'}
               <ArrowRight className="h-4 w-4" />
             </AnimatedButton>
-          </Link>
-          <Link href="/login">
-            <AnimatedButton variant="secondary" size="lg" className="min-w-[180px]">
-              Sign In
+            <AnimatedButton
+              variant="secondary"
+              size="lg"
+              className="min-w-[180px]"
+              onClick={() => setJoinOpen(!joinOpen)}
+            >
+              Join Game
             </AnimatedButton>
-          </Link>
+          </div>
+
+          <AnimatePresence>
+            {joinOpen && (
+              <motion.div
+                initial={{ opacity: 0, height: 0, y: -10 }}
+                animate={{ opacity: 1, height: 'auto', y: 0 }}
+                exit={{ opacity: 0, height: 0, y: -10 }}
+                transition={{ duration: 0.25 }}
+                className="w-full max-w-xs overflow-hidden"
+              >
+                <div className="flex gap-2 pt-1">
+                  <input
+                    type="text"
+                    placeholder="Room code"
+                    value={roomCode}
+                    onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
+                    onKeyDown={(e) => e.key === 'Enter' && handleJoin()}
+                    maxLength={6}
+                    autoFocus
+                    className="flex-1 px-4 py-3 rounded-xl glass text-text-primary placeholder:text-text-tertiary text-sm font-mono tracking-widest text-center focus:outline-none focus:ring-1 focus:ring-accent/30 bg-transparent uppercase"
+                  />
+                  <AnimatedButton onClick={handleJoin} disabled={roomCode.trim().length < 4} loading={joining}>
+                    Go
+                  </AnimatedButton>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </motion.div>
+
       </div>
 
       <motion.div
@@ -158,12 +235,12 @@ function FeatureSection() {
     {
       icon: <Shield className="h-6 w-6" />,
       title: 'Fair & Secure',
-      description: 'Server-authoritative game logic. Every shuffle, every deal — verified and tamper-proof.',
+      description: 'Server side authoritative game logic. Every shuffle, every deal verified and tamper proof.',
     },
     {
       icon: <Zap className="h-6 w-6" />,
       title: 'Instant Rooms',
-      description: 'Create a table in one tap. Share a 6-digit code. Your friends join in seconds.',
+      description: 'Create a table in one tap. Share a 6 digit code. Your friends join in seconds.',
     },
   ]
 
@@ -175,7 +252,7 @@ function FeatureSection() {
             Cards, reimagined.
           </h2>
           <p className="text-text-secondary text-lg max-w-md mx-auto">
-            Everything you need for the perfect game night — from casino classics to party favorites.
+            Everything you need for the perfect game night from casino classics to party favorites.
           </p>
         </motion.div>
 
@@ -208,7 +285,7 @@ const GAMES = [
     name: 'Blackjack',
     description: 'Classic 21 with multiplayer tables. Hit, stand, or double down — with fluid card animations and real-time updates.',
     emoji: '🃏',
-    category: 'casino',
+    category: 'casino' as const,
     tags: ['2-7 Players', 'Server Dealt'],
     status: 'live' as const,
   },
@@ -217,7 +294,7 @@ const GAMES = [
     name: "Texas Hold'em",
     description: 'Full poker experience — blinds, community cards, all-in moments. Server-side shuffles keep every hand honest.',
     emoji: '♠️',
-    category: 'casino',
+    category: 'casino' as const,
     tags: ['2-9 Players', 'No Limit'],
     status: 'live' as const,
   },
@@ -226,67 +303,93 @@ const GAMES = [
     name: 'Uno',
     description: 'The classic color-matching card game. Play action cards, reverse turns, and race to empty your hand first.',
     emoji: '🔴',
-    category: 'classic',
+    category: 'party' as const,
     tags: ['2-10 Players', 'Color Match'],
     status: 'live' as const,
   },
   {
-    id: 'crazy-eights',
-    name: 'Crazy Eights',
-    description: 'Match suits or ranks and play eights to change the suit. Simple to learn, surprisingly strategic.',
-    emoji: '8️⃣',
-    category: 'classic',
-    tags: ['2-7 Players', 'Classic'],
+    id: 'hot-potato',
+    name: 'Hot Potato',
+    description:
+      'A fast-paced elimination game where players pass a “hot potato” before a hidden timer runs out. If you’re holding it when time hits zero, you’re out.',
+    emoji: '🔥',
+    category: 'party' as const,
+    tags: ['3-10 Players', 'Elimination'],
+    status: 'live' as const,
+  },
+  {
+    id: 'roulette',
+    name: 'Roulette',
+    description: 'Place your bets and spin the wheel. Predict where it lands — numbers, colors, or ranges — and win chips if you’re right.',
+    emoji: '🎰',
+    category: 'casino' as const,
+    tags: ['Betting', 'Wheel'],
     status: 'wip' as const,
   },
   {
-    id: 'go-fish',
-    name: 'Go Fish',
-    description: 'Ask for cards and collect sets of four. A fun, casual game perfect for all ages.',
-    emoji: '🐟',
-    category: 'classic',
-    tags: ['2-6 Players', 'Family'],
+    id: 'sus-meter',
+    name: 'Sus Meter',
+    description: 'Answer a prompt and vote on who fits it best. Results reveal who the group thinks is the most “sus.”',
+    emoji: '🤨',
+    category: 'party' as const,
+    tags: ['Voting', 'Social'],
     status: 'wip' as const,
   },
   {
-    id: 'war',
-    name: 'War',
-    description: 'Flip and compare — highest card wins. Ties trigger an all-out war. Pure luck, pure fun.',
-    emoji: '⚔️',
-    category: 'classic',
-    tags: ['2 Players', 'Fast'],
+    id: 'would-you-rather',
+    name: 'Would You Rather',
+    description: 'Pick between two tough or funny choices. After everyone votes, see how your answer compares to the group.',
+    emoji: '⚖️',
+    category: 'party' as const,
+    tags: ['Voting', 'Party'],
     status: 'wip' as const,
   },
   {
-    id: 'spoons',
-    name: 'Spoons',
-    description: 'Race to collect four of a kind, then grab a spoon before someone else does. Fast and frantic.',
-    emoji: '🥄',
-    category: 'party',
-    tags: ['3-8 Players', 'Party'],
+    id: 'guess-the-ranking',
+    name: 'Guess the Ranking',
+    description:
+      'Put items in the correct order based on a category (like fastest, biggest, most popular). Closest to the real ranking wins.',
+    emoji: '📊',
+    category: 'party' as const,
+    tags: ['Trivia', 'Order'],
     status: 'wip' as const,
+    externalUrl: 'https://www.higherorlowergame.com/',
   },
   {
-    id: 'slapjack',
-    name: 'Slapjack',
-    description: 'Flip cards and slap the pile when a Jack appears. Quick reflexes win. Hilarious chaos.',
-    emoji: '✋',
-    category: 'party',
-    tags: ['2-8 Players', 'Reaction'],
+    id: 'pictionary',
+    name: 'Pictionary',
+    description: 'Draw a word or phrase while others try to guess it before time runs out. No words — just your drawing skills.',
+    emoji: '🎨',
+    category: 'party' as const,
+    tags: ['Drawing', 'Guessing'],
     status: 'wip' as const,
+    externalUrl: 'https://skribbl.io/',
+  },
+  {
+    id: 'music-guess',
+    name: 'Music Guess',
+    description: 'Listen to a short clip and guess the song or artist as quickly as possible. Fastest correct answer wins the round.',
+    emoji: '🎵',
+    category: 'party' as const,
+    tags: ['Music', 'Speed'],
+    status: 'wip' as const,
+    externalUrl: 'https://guessthesong.io/',
   },
 ]
 
 const CATEGORIES = [
   { id: 'all', label: 'All Games' },
   { id: 'casino', label: 'Casino' },
-  { id: 'classic', label: 'Classic' },
   { id: 'party', label: 'Party' },
 ]
 
 function GameShowcase() {
+  const router = useRouter()
+  const { user, isGuest } = useAuthStore()
+  const isSignedIn = !!user && !isGuest
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState('all')
+  const [creatingGame, setCreatingGame] = useState<string | null>(null)
 
   const filtered = GAMES.filter((g) => {
     if (category !== 'all' && g.category !== category) return false
@@ -294,8 +397,40 @@ function GameShowcase() {
     return true
   })
 
+  const handlePlayGame = useCallback(async (gameId: string) => {
+    if (!isSignedIn) {
+      router.push(`/signup?game=${gameId}`)
+      return
+    }
+
+    if (creatingGame) return
+    setCreatingGame(gameId)
+
+    const code = generateRoomCode()
+    try {
+      let workerUrl = process.env.NEXT_PUBLIC_WORKER_URL || 'http://localhost:8787'
+      if (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+        workerUrl = workerUrl.replace('localhost', window.location.hostname).replace('127.0.0.1', window.location.hostname)
+      }
+
+      const res = await fetch(`${workerUrl}/api/rooms`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code, gameType: gameId, hostId: 'pending', maxPlayers: gameId === 'hot-potato' ? 8 : gameId === 'poker' ? 6 : 5 }),
+      })
+
+      if (res.ok) {
+        router.push(`/room/${code}?game=${gameId}`)
+      } else {
+        setCreatingGame(null)
+      }
+    } catch {
+      setCreatingGame(null)
+    }
+  }, [isSignedIn, creatingGame, router])
+
   return (
-    <section className="relative py-32 px-4">
+    <section id="game-library" className="relative py-32 px-4">
       <div className="max-w-5xl mx-auto">
         <motion.div
           className="text-center mb-10"
@@ -344,18 +479,21 @@ function GameShowcase() {
           <AnimatePresence mode="popLayout">
             {filtered.map((game, i) => {
               const isLive = game.status === 'live'
+              const externalUrl = game.status === 'wip' ? game.externalUrl : undefined
+
               const inner = (
                 <motion.div
-                  key={game.id}
                   layout
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.95 }}
                   transition={{ delay: i * 0.05, duration: 0.4 }}
-                  whileHover={isLive ? { scale: 1.03, y: -4 } : {}}
-                  whileTap={isLive ? { scale: 0.98 } : {}}
+                  whileHover={isLive || externalUrl ? { scale: 1.03, y: -4 } : {}}
+                  whileTap={isLive || externalUrl ? { scale: 0.98 } : {}}
                   className={`glass rounded-2xl p-6 relative overflow-hidden group transition-colors text-left ${
-                    isLive ? 'cursor-pointer hover:bg-white/[0.06]' : 'hover:bg-white/[0.04]'
+                    isLive || externalUrl
+                      ? 'cursor-pointer hover:bg-white/[0.06]'
+                      : 'hover:bg-white/[0.04]'
                   }`}
                 >
                   {game.status === 'wip' && (
@@ -373,6 +511,9 @@ function GameShowcase() {
                   <div className="text-3xl mb-3">{game.emoji}</div>
                   <h3 className="text-lg font-bold text-text-primary mb-2">{game.name}</h3>
                   <p className="text-sm text-text-secondary leading-relaxed mb-4">{game.description}</p>
+                  {externalUrl && (
+                    <p className="text-xs text-accent/90 mb-3 font-medium">Similar game — opens in a new tab</p>
+                  )}
                   <div className="flex gap-2 flex-wrap">
                     {game.tags.map((tag) => (
                       <span key={tag} className="text-xs px-2.5 py-1 rounded-full bg-white/[0.04] text-text-tertiary">
@@ -383,13 +524,26 @@ function GameShowcase() {
                 </motion.div>
               )
 
-              return isLive ? (
-                <Link key={game.id} href={`/signup?game=${game.id}`}>
-                  {inner}
-                </Link>
-              ) : (
-                <div key={game.id}>{inner}</div>
-              )
+              if (isLive) {
+                return (
+                  <div key={game.id} onClick={() => handlePlayGame(game.id)} className="cursor-pointer relative">
+                    {creatingGame === game.id && (
+                      <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/40 rounded-2xl backdrop-blur-sm">
+                        <Loader2 className="h-6 w-6 animate-spin text-accent-light" />
+                      </div>
+                    )}
+                    {inner}
+                  </div>
+                )
+              }
+              if (externalUrl) {
+                return (
+                  <a key={game.id} href={externalUrl} target="_blank" rel="noopener noreferrer">
+                    {inner}
+                  </a>
+                )
+              }
+              return <div key={game.id}>{inner}</div>
             })}
           </AnimatePresence>
         </div>
@@ -418,12 +572,10 @@ function CTASection() {
           <p className="text-text-secondary text-lg mb-10">
             Create your free account and start playing in under a minute.
           </p>
-          <Link href="/signup">
-            <AnimatedButton size="lg" className="min-w-[200px]">
-              Create Account
-              <ArrowRight className="h-4 w-4" />
-            </AnimatedButton>
-          </Link>
+          <AnimatedButton href="/signup" size="lg" className="min-w-[200px]">
+            Create Account
+            <ArrowRight className="h-4 w-4" />
+          </AnimatedButton>
         </motion.div>
       </div>
     </section>
@@ -446,26 +598,39 @@ function Footer() {
   )
 }
 
+function NavBar() {
+  const { user, isGuest } = useAuthStore()
+  const isSignedIn = !!user && !isGuest
+
+  return (
+    <nav className="fixed top-0 left-0 right-0 z-50 px-4 py-4">
+      <div className="max-w-5xl mx-auto flex items-center justify-between">
+        <Link href="/" className="flex items-center gap-2.5">
+          <DeckLogo />
+          <span className="text-lg font-semibold text-text-primary">Deck</span>
+        </Link>
+        <div className="flex items-center gap-3">
+          {isSignedIn ? (
+            <>
+              <AnimatedButton href="/profile" variant="ghost" size="sm">Profile</AnimatedButton>
+              <AnimatedButton href="/leaderboard" variant="ghost" size="sm">Leaderboard</AnimatedButton>
+            </>
+          ) : (
+            <>
+              <AnimatedButton href="/login" variant="ghost" size="sm">Sign In</AnimatedButton>
+              <AnimatedButton href="/signup" size="sm">Sign Up</AnimatedButton>
+            </>
+          )}
+        </div>
+      </div>
+    </nav>
+  )
+}
+
 export default function LandingPage() {
   return (
     <main>
-      <nav className="fixed top-0 left-0 right-0 z-50 px-4 py-4">
-        <div className="max-w-5xl mx-auto flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2.5">
-            <DeckLogo />
-            <span className="text-lg font-semibold text-text-primary">Deck</span>
-          </Link>
-          <div className="flex items-center gap-3">
-            <Link href="/login">
-              <AnimatedButton variant="ghost" size="sm">Sign In</AnimatedButton>
-            </Link>
-            <Link href="/signup">
-              <AnimatedButton size="sm">Get Started</AnimatedButton>
-            </Link>
-          </div>
-        </div>
-      </nav>
-
+      <NavBar />
       <HeroSection />
       <FeatureSection />
       <GameShowcase />

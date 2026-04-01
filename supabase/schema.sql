@@ -1,5 +1,6 @@
 -- Deck — Supabase Schema
 -- Run this in the Supabase SQL editor to set up your database.
+-- Safe to re-run — all statements are idempotent.
 
 -- Profiles table (linked to auth.users)
 create table if not exists public.profiles (
@@ -18,17 +19,18 @@ create table if not exists public.profiles (
 -- Enable RLS
 alter table public.profiles enable row level security;
 
--- Users can read any profile
+-- Policies (drop + recreate to be idempotent)
+drop policy if exists "Profiles are viewable by everyone" on public.profiles;
 create policy "Profiles are viewable by everyone"
   on public.profiles for select
   using (true);
 
--- Users can update only their own profile
+drop policy if exists "Users can update own profile" on public.profiles;
 create policy "Users can update own profile"
   on public.profiles for update
   using (auth.uid() = id);
 
--- Users can insert their own profile
+drop policy if exists "Users can insert own profile" on public.profiles;
 create policy "Users can insert own profile"
   on public.profiles for insert
   with check (auth.uid() = id);
@@ -63,6 +65,40 @@ begin
 end;
 $$ language plpgsql;
 
+drop trigger if exists profiles_updated_at on public.profiles;
 create trigger profiles_updated_at
   before update on public.profiles
+  for each row execute procedure public.update_updated_at();
+
+-- Per-game stats for leaderboard
+create table if not exists public.game_stats (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references public.profiles(id) on delete cascade not null,
+  game_type text not null,
+  games_played integer not null default 0,
+  games_won integer not null default 0,
+  updated_at timestamptz not null default now(),
+  unique(user_id, game_type)
+);
+
+alter table public.game_stats enable row level security;
+
+drop policy if exists "Game stats are viewable by everyone" on public.game_stats;
+create policy "Game stats are viewable by everyone"
+  on public.game_stats for select
+  using (true);
+
+drop policy if exists "Users can upsert own game stats" on public.game_stats;
+create policy "Users can upsert own game stats"
+  on public.game_stats for insert
+  with check (auth.uid() = user_id);
+
+drop policy if exists "Users can update own game stats" on public.game_stats;
+create policy "Users can update own game stats"
+  on public.game_stats for update
+  using (auth.uid() = user_id);
+
+drop trigger if exists game_stats_updated_at on public.game_stats;
+create trigger game_stats_updated_at
+  before update on public.game_stats
   for each row execute procedure public.update_updated_at();

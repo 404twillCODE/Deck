@@ -7,12 +7,13 @@ import { motion } from 'framer-motion'
 import { createClient } from '@/lib/supabase/client'
 import { AuthCard, AnimatedButton, PremiumInput, DeckLogo } from '@/components/ui'
 import { useUIStore } from '@/stores/ui-store'
+import { enableGuestMode } from '@/lib/guest'
 import { Mail, Lock, Wand2 } from 'lucide-react'
 
 function LoginContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const redirect = searchParams.get('redirect') || '/dashboard'
+  const redirect = searchParams.get('redirect') || '/'
   const { addToast } = useUIStore()
 
   const [email, setEmail] = useState('')
@@ -36,18 +37,34 @@ function LoginContent() {
     if (!validate()) return
 
     setLoading(true)
-    const supabase = createClient()
+    try {
+      const supabase = createClient()
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+      const { error } = await Promise.race([
+        supabase.auth.signInWithPassword({ email, password }),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Request timed out — check your connection and try again.')), 15_000)
+        ),
+      ])
 
-    if (error) {
-      addToast({ type: 'error', title: 'Sign in failed', message: error.message })
+      if (error) {
+        let message = error.message
+        if (message.toLowerCase().includes('email not confirmed')) {
+          message = 'Your email is not confirmed yet. Check your inbox for the confirmation link.'
+        } else if (message.toLowerCase().includes('invalid login credentials')) {
+          message = 'Wrong email or password. Double-check and try again.'
+        }
+        addToast({ type: 'error', title: 'Sign in failed', message })
+        return
+      }
+
+      addToast({ type: 'success', title: 'Welcome back!' })
+      router.push(redirect)
+    } catch (err) {
+      addToast({ type: 'error', title: 'Sign in failed', message: err instanceof Error ? err.message : 'Something went wrong' })
+    } finally {
       setLoading(false)
-      return
     }
-
-    addToast({ type: 'success', title: 'Welcome back!' })
-    router.push(redirect)
   }
 
   async function handleMagicLink() {
@@ -153,6 +170,15 @@ function LoginContent() {
           Sign up
         </Link>
       </p>
+
+      <div className="mt-4 pt-4 border-t border-white/[0.06]">
+        <button
+          onClick={() => { enableGuestMode(); router.push('/') }}
+          className="w-full text-center text-sm text-text-tertiary hover:text-text-secondary transition-colors py-2"
+        >
+          Skip for now — play as guest
+        </button>
+      </div>
     </AuthCard>
   )
 }

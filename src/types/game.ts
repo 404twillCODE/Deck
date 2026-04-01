@@ -1,6 +1,6 @@
 export type Suit = 'hearts' | 'diamonds' | 'clubs' | 'spades'
 export type Rank = '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | 'J' | 'Q' | 'K' | 'A'
-export type GameType = 'blackjack' | 'poker' | 'uno'
+export type GameType = 'blackjack' | 'poker' | 'uno' | 'hot-potato'
 
 export type UnoColor = 'red' | 'yellow' | 'green' | 'blue'
 export type UnoCardType = 'number' | 'skip' | 'reverse' | 'draw_two' | 'wild' | 'wild_draw_four'
@@ -127,6 +127,23 @@ export interface Room {
   maxPlayers: number
   isStarted: boolean
   createdAt: string
+}
+
+export interface HotPotatoPlayer extends Player {
+  isAlive: boolean
+  eliminatedRound: number | null
+}
+
+export interface HotPotatoState {
+  phase: 'waiting' | 'countdown' | 'passing' | 'exploded' | 'complete'
+  players: HotPotatoPlayer[]
+  holderIndex: number
+  roundNumber: number
+  eliminationOrder: string[]
+  winnerId: string | null
+  passCount: number
+  roundStartedAt: number
+  lastEliminatedId: string | null
 }
 
 export interface TableSettings {

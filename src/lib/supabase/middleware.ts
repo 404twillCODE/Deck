@@ -25,23 +25,25 @@ export async function updateSession(request: NextRequest) {
     }
   )
 
-  const { data: { user } } = await supabase.auth.getUser()
+  let user = null
+  try {
+    const { data } = await supabase.auth.getUser()
+    user = data.user
+  } catch {
+    // If auth check fails, treat as unauthenticated
+  }
 
-  const protectedPaths = ['/dashboard', '/room', '/profile']
+  const protectedPaths = ['/room', '/profile', '/leaderboard']
   const isProtected = protectedPaths.some((path) =>
     request.nextUrl.pathname.startsWith(path)
   )
 
-  if (isProtected && !user) {
+  const isGuest = request.cookies.has('deck_guest')
+
+  if (isProtected && !user && !isGuest) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     url.searchParams.set('redirect', request.nextUrl.pathname)
-    return NextResponse.redirect(url)
-  }
-
-  if (user && (request.nextUrl.pathname === '/login' || request.nextUrl.pathname === '/signup')) {
-    const url = request.nextUrl.clone()
-    url.pathname = '/dashboard'
     return NextResponse.redirect(url)
   }
 
