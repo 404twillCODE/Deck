@@ -3,17 +3,37 @@ import type { Env } from './types'
 export { BlackjackTableDO } from './durable-objects/blackjack-table'
 export { PokerTableDO } from './durable-objects/poker-table'
 
-const CORS_HEADERS: Record<string, string> = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+const ALLOWED_ORIGINS = new Set([
+  'https://deck-mu.vercel.app',
+  'http://localhost:3000',
+  'http://localhost:3001',
+  'http://localhost:5173',
+])
+
+function corsHeaders(origin: string | null): Record<string, string> {
+  const allowedOrigin = origin && ALLOWED_ORIGINS.has(origin) ? origin : ''
+  return {
+    ...(allowedOrigin ? { 'Access-Control-Allow-Origin': allowedOrigin } : {}),
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Max-Age': '86400',
+    Vary: 'Origin',
+  }
 }
 
-function json(data: unknown, status = 200): Response {
+function json(request: Request, data: unknown, status = 200): Response {
+  const origin = request.headers.get('Origin')
   return new Response(JSON.stringify(data), {
     status,
-    headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
+    headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
   })
+}
+
+function withCors(request: Request, response: Response): Response {
+  const origin = request.headers.get('Origin')
+  const headers = new Headers(response.headers)
+  for (const [k, v] of Object.entries(corsHeaders(origin))) headers.set(k, v)
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers })
 }
 
 // In-memory room registry (maps code → gameType). Survives within a single
@@ -25,7 +45,7 @@ export default {
     const url = new URL(request.url)
 
     if (request.method === 'OPTIONS') {
-      return new Response(null, { status: 204, headers: CORS_HEADERS })
+      return new Response(null, { status: 204, headers: corsHeaders(request.headers.get('Origin')) })
     }
 
     // ─── REST: Create Room ────────────────────────────────
@@ -43,11 +63,11 @@ export default {
       try {
         body = await request.json()
       } catch {
-        return json({ error: 'Invalid JSON body' }, 400)
+        return json(request, { error: 'Invalid JSON body' }, 400)
       }
 
       if (!body.code || !body.gameType) {
-        return json({ error: 'Missing required fields: code, gameType' }, 400)
+        return json(request, { error: 'Missing required fields: code, gameType' }, 400)
       }
 
       const hostId = body.hostId || 'pending'
@@ -73,12 +93,12 @@ export default {
         }))
 
         if (!initResponse.ok) {
-          return json({ error: 'Failed to initialize room' }, 500)
+          return json(request, { error: 'Failed to initialize room' }, 500)
         }
 
         roomRegistry.set(body.code, body.gameType)
 
-        return json({
+        return json(request, {
           success: true,
           room: {
             code: body.code,
@@ -87,7 +107,7 @@ export default {
           },
         })
       } catch (err) {
-        return json({ error: 'Room initialization failed', detail: String(err) }, 500)
+        return json(request, { error: 'Room initialization failed', detail: String(err) }, 500)
       }
     }
 
@@ -98,7 +118,7 @@ export default {
       const code = roomLookupMatch[1]
       const gameType = roomRegistry.get(code)
       if (gameType) {
-        return json({ code, gameType })
+        return json(request, { code, gameType })
       }
       // Room not in registry — could have been created in a different isolate.
       // Try both DOs by querying their /info endpoint.
@@ -112,18 +132,18 @@ export default {
             const info = await res.json() as { active: boolean; gameType: string }
             if (info.active) {
               roomRegistry.set(code, type)
-              return json({ code, gameType: type })
+              return json(request, { code, gameType: type })
             }
           }
         } catch { /* ignore */ }
       }
-      return json({ error: 'Room not found' }, 404)
+      return json(request, { error: 'Room not found' }, 404)
     }
 
     // ─── REST: Health ─────────────────────────────────────
 
     if (url.pathname === '/api/health') {
-      return json({ status: 'ok', timestamp: Date.now() })
+      return json(request, { status: 'ok', timestamp: Date.now() })
     }
 
     // ─── WebSocket: Room Connection ───────────────────────
@@ -132,7 +152,7 @@ export default {
     if (wsMatch) {
       const upgradeHeader = request.headers.get('Upgrade')
       if (!upgradeHeader || upgradeHeader.toLowerCase() !== 'websocket') {
-        return new Response('Expected WebSocket upgrade', { status: 426 })
+        return withCors(request, new Response('Expected WebSocket upgrade', { status: 426 }))
       }
 
       const roomCode = wsMatch[1].toUpperCase()
@@ -150,6 +170,6 @@ export default {
 
     // ─── Fallback ─────────────────────────────────────────
 
-    return json({ error: 'Not found' }, 404)
+    return json(request, { error: 'Not found' }, 404)
   },
 }
