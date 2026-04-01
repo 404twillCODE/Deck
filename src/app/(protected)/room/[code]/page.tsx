@@ -104,7 +104,7 @@ function RoomContent() {
           updateGameState(message.payload)
           break
         case 'chips_reset':
-          addToast({ type: 'info', title: 'Chips Reset', description: `Everyone is out of chips! All players reset to ${message.payload.startingChips.toLocaleString()} chips.` })
+          addToast({ type: 'info', title: 'Chips Reset', message: `Everyone is out of chips! All players reset to ${message.payload.startingChips.toLocaleString()} chips.` })
           break
         case 'error':
           if (message.payload.code === 'ROOM_NOT_FOUND') {
@@ -185,7 +185,7 @@ function RoomContent() {
         case 'bj_state': case 'bj_round_result': updateGameState(message.payload); break
         case 'pk_state': case 'pk_showdown': updateGameState(message.payload); break
         case 'chips_reset':
-          addToast({ type: 'info', title: 'Chips Reset', description: `Everyone reset to ${message.payload.startingChips.toLocaleString()} chips.` })
+          addToast({ type: 'info', title: 'Chips Reset', message: `Everyone reset to ${message.payload.startingChips.toLocaleString()} chips.` })
           break
         case 'error':
           if (message.payload.code === 'ROOM_NOT_FOUND') router.push('/dashboard')
