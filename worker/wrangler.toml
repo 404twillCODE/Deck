@@ -1,0 +1,22 @@
+name = "deck-worker"
+main = "src/index.ts"
+compatibility_date = "2025-03-15"
+
+[durable_objects]
+bindings = [
+  { name = "BLACKJACK_TABLE", class_name = "BlackjackTableDO" },
+  { name = "POKER_TABLE", class_name = "PokerTableDO" }
+]
+
+[[migrations]]
+tag = "v1"
+new_classes = ["BlackjackTableDO", "PokerTableDO"]
+
+[vars]
+ENVIRONMENT = "development"
+
+# Uncomment for D1 database
+# [[d1_databases]]
+# binding = "DB"
+# database_name = "deck-db"
+# database_id = "your-database-id"
