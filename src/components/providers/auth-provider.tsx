@@ -4,6 +4,7 @@ import { useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useAuthStore } from '@/stores/auth-store'
 import type { UserProfile } from '@/types'
+import type { AuthChangeEvent, Session } from '@supabase/supabase-js'
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const { setUser, setLoading } = useAuthStore()
@@ -45,7 +46,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     getInitialSession()
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      async (event: AuthChangeEvent, session: Session | null) => {
         if (event === 'SIGNED_IN' && session?.user) {
           const { data: profile } = await supabase
             .from('profiles')
