@@ -18,10 +18,10 @@ export async function createServerSupabaseClient() {
               cookieStore.set(name, value, options)
             )
           } catch {
-            // The `setAll` method is called from a Server Component
+            // setAll can be called from a Server Component where cookies are read-only
           }
         },
       },
-    }
+    },
   )
 }

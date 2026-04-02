@@ -22,8 +22,26 @@ export async function updateSession(request: NextRequest) {
           )
         },
       },
-    }
+    },
   )
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  console.log('[middleware]', request.nextUrl.pathname, user ? `user=${user.id}` : 'no-user')
+
+  const protectedPaths = ['/profile', '/room', '/leaderboard']
+  const isProtected = protectedPaths.some((p) =>
+    request.nextUrl.pathname.startsWith(p),
+  )
+
+  if (isProtected && !user) {
+    const url = request.nextUrl.clone()
+    url.pathname = '/login'
+    url.searchParams.set('redirect', request.nextUrl.pathname)
+    return NextResponse.redirect(url)
+  }
 
   return supabaseResponse
 }

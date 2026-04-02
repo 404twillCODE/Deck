@@ -1,13 +1,15 @@
 'use client'
 
 import { useEffect } from 'react'
-import { createClient, SUPABASE_STORAGE_KEY } from '@/lib/supabase/client'
+import { createClient } from '@/lib/supabase/client'
 import { useAuthStore } from '@/stores/auth-store'
-import { isGuestMode, getGuestProfile } from '@/lib/guest'
 import type { UserProfile } from '@/types'
 import type { AuthChangeEvent, Session, User } from '@supabase/supabase-js'
 
-function fallbackProfile(user: User): UserProfile {
+type InitialAuthUser = Pick<User, 'id' | 'email' | 'user_metadata'>
+
+function toProfile(user: User, dbRow: Record<string, unknown> | null): UserProfile {
+  if (dbRow) return dbRow as unknown as UserProfile
   return {
     id: user.id,
     email: user.email || '',
@@ -21,71 +23,84 @@ function fallbackProfile(user: User): UserProfile {
   }
 }
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const { setUser, setGuest, setLoading } = useAuthStore()
+export function AuthProvider({
+  children,
+  initialAuthUser,
+}: {
+  children: React.ReactNode
+  initialAuthUser: InitialAuthUser | null
+}) {
+  const { setUser, setLoading } = useAuthStore()
 
   useEffect(() => {
     const supabase = createClient()
     setLoading(true)
 
-    async function syncUser(user: User | null) {
+    async function resolve(user: User | null) {
       if (!user) {
-        if (isGuestMode()) {
-          const guestProfile = getGuestProfile()
-          if (guestProfile) {
-            setGuest(guestProfile as UserProfile)
-            return
-          }
-        }
         setUser(null)
         return
       }
 
+      // Never block auth on profile loading. A valid auth user should hydrate
+      // immediately even if the profiles table is missing, slow, or blocked.
+      setUser(toProfile(user, null))
+
       try {
-        const { data: profile } = await supabase
+        const profilePromise = supabase
           .from('profiles')
           .select('*')
           .eq('id', user.id)
-          .single()
+          .maybeSingle()
 
-        setUser(profile ? (profile as UserProfile) : fallbackProfile(user))
+        const timeoutPromise = new Promise<null>((resolveTimeout) => {
+          setTimeout(() => resolveTimeout(null), 4000)
+        })
+
+        const result = await Promise.race([profilePromise, timeoutPromise])
+
+        if (result && 'data' in result && result.data) {
+          setUser(toProfile(user, result.data as Record<string, unknown>))
+        }
       } catch {
-        setUser(fallbackProfile(user))
+        // Ignore profile loading failures during auth bootstrap.
       }
     }
 
-    // Fast initial hydration from local session to avoid a network round-trip.
     void (async () => {
       try {
-        const { data: sessionData } = await supabase.auth.getSession()
-        const user = sessionData.session?.user ?? null
-        await syncUser(user)
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err)
-        if (msg.includes('NavigatorLock') || msg.toLowerCase().includes('lock')) {
-          try { localStorage.removeItem(SUPABASE_STORAGE_KEY) } catch { /* ignore */ }
-          try { sessionStorage.removeItem(SUPABASE_STORAGE_KEY) } catch { /* ignore */ }
-          try { await supabase.auth.signOut({ scope: 'local' }) } catch { /* ignore */ }
+        if (initialAuthUser) {
+          console.log('[auth-provider] server initial user →', initialAuthUser.id)
+          await resolve(initialAuthUser as User)
+          return
         }
+
+        const { data: { user } } = await supabase.auth.getUser()
+        console.log('[auth-provider] getUser →', user ? user.id : 'null')
+        await resolve(user)
+      } catch {
+        console.log('[auth-provider] getUser threw')
         setUser(null)
       }
     })()
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(
       async (event: AuthChangeEvent, session: Session | null) => {
+        console.log('[auth-provider] onAuthStateChange →', event)
         if (event === 'SIGNED_OUT') {
           setUser(null)
           return
         }
-
-        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
-          await syncUser(session?.user ?? null)
+        if (session?.user) {
+          await resolve(session.user)
         }
-      }
+      },
     )
 
     return () => subscription.unsubscribe()
-  }, [setUser, setGuest, setLoading])
+  }, [initialAuthUser, setUser, setLoading])
 
   return <>{children}</>
 }

@@ -4,6 +4,7 @@ import './globals.css'
 import { FloatingBackground } from '@/components/ui/floating-background'
 import { ToastContainer } from '@/components/ui/toast-system'
 import { AuthProvider } from '@/components/providers/auth-provider'
+import { createServerSupabaseClient } from '@/lib/supabase/server'
 
 const inter = Inter({
   subsets: ['latin'],
@@ -32,12 +33,17 @@ export const viewport: Viewport = {
   themeColor: '#050507',
 }
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const supabase = await createServerSupabaseClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
   return (
     <html lang="en" className={`${inter.variable} dark`} suppressHydrationWarning>
       <body className="font-sans antialiased">
         <FloatingBackground />
-        <AuthProvider>
+        <AuthProvider initialAuthUser={user}>
           {children}
         </AuthProvider>
         <ToastContainer />

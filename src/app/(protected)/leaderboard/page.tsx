@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { createClient } from '@/lib/supabase/client'
+import { getGameStatLabels } from '@/lib/stats'
 import { useAuthStore } from '@/stores/auth-store'
 import { AnimatedButton, GlassPanel, Skeleton } from '@/components/ui'
 import { ArrowLeft, Trophy, Medal, Crown } from 'lucide-react'
@@ -39,6 +40,7 @@ export default function LeaderboardPage() {
   const [filter, setFilter] = useState<GameFilter>('all')
   const [entries, setEntries] = useState<LeaderboardEntry[]>([])
   const [loading, setLoading] = useState(true)
+  const statLabels = getGameStatLabels(filter)
 
   useEffect(() => {
     async function load() {
@@ -47,20 +49,39 @@ export default function LeaderboardPage() {
 
       if (filter === 'all') {
         const { data } = await supabase
-          .from('profiles')
-          .select('id, display_name, games_played, games_won')
+          .from('game_stats')
+          .select('user_id, games_played, games_won, profiles!inner(display_name)')
           .gt('games_played', 0)
-          .order('games_won', { ascending: false })
-          .limit(50)
+        type OverallRow = {
+          user_id: string
+          games_played: number
+          games_won: number
+          profiles: { display_name: string } | { display_name: string }[]
+        }
+
+        const aggregated = new Map<string, LeaderboardEntry>()
+        for (const row of (data || []) as OverallRow[]) {
+          const profile = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles
+          const current = aggregated.get(row.user_id)
+          if (current) {
+            current.games_played += row.games_played
+            current.games_won += row.games_won
+            current.win_rate = current.games_played > 0 ? current.games_won / current.games_played : 0
+          } else {
+            aggregated.set(row.user_id, {
+              user_id: row.user_id,
+              display_name: profile?.display_name || 'Player',
+              games_played: row.games_played,
+              games_won: row.games_won,
+              win_rate: row.games_played > 0 ? row.games_won / row.games_played : 0,
+            })
+          }
+        }
 
         setEntries(
-          (data || []).map((p: { id: string; display_name: string; games_played: number; games_won: number }) => ({
-            user_id: p.id,
-            display_name: p.display_name,
-            games_played: p.games_played,
-            games_won: p.games_won,
-            win_rate: p.games_played > 0 ? p.games_won / p.games_played : 0,
-          })),
+          [...aggregated.values()]
+            .sort((a: LeaderboardEntry, b: LeaderboardEntry) => b.games_won - a.games_won || b.win_rate - a.win_rate || b.games_played - a.games_played)
+            .slice(0, 50),
         )
       } else {
         const { data } = await supabase
@@ -83,7 +104,7 @@ export default function LeaderboardPage() {
               games_won: s.games_won,
               win_rate: s.games_played > 0 ? s.games_won / s.games_played : 0,
             }
-          }),
+          }).sort((a: LeaderboardEntry, b: LeaderboardEntry) => b.games_won - a.games_won || b.win_rate - a.win_rate || b.games_played - a.games_played),
         )
       }
 
@@ -151,7 +172,7 @@ export default function LeaderboardPage() {
                 <div>
                   <p className="text-sm font-medium text-text-primary">Your Rank</p>
                   <p className="text-xs text-text-tertiary">
-                    {entries[myRank - 1]?.games_won} wins · {entries[myRank - 1]?.games_played} played
+                    {entries[myRank - 1]?.games_won} {statLabels.wonNoun}{entries[myRank - 1]?.games_won === 1 ? '' : 's'} · {entries[myRank - 1]?.games_played} {statLabels.playedNoun}{entries[myRank - 1]?.games_played === 1 ? '' : 's'}
                   </p>
                 </div>
               </div>
@@ -173,8 +194,8 @@ export default function LeaderboardPage() {
           <div className="grid grid-cols-[40px_1fr_80px_80px_80px] gap-2 px-4 py-3 border-b border-white/[0.04] text-xs font-medium text-text-tertiary uppercase tracking-wider">
             <span>#</span>
             <span>Player</span>
-            <span className="text-right">Wins</span>
-            <span className="text-right">Played</span>
+            <span className="text-right">{statLabels.wonLabel}</span>
+            <span className="text-right">{statLabels.playedLabel}</span>
             <span className="text-right">Win %</span>
           </div>
 

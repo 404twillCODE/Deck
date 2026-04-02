@@ -127,6 +127,7 @@ input:-webkit-autofill:focus {
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+  padding-bottom: 0.15em;
 }
 
 .text-gradient-accent {
@@ -134,6 +135,7 @@ input:-webkit-autofill:focus {
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+  padding-bottom: 0.15em;
 }
 
 @media (prefers-reduced-motion: reduce) {

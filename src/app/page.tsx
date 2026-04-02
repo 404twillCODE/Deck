@@ -7,7 +7,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { AnimatedButton, DeckLogo } from '@/components/ui'
 import { ArrowRight, Users, Shield, Zap, Sparkles, Search, Loader2 } from 'lucide-react'
-import { enableGuestMode, isGuestMode } from '@/lib/guest'
+import { isGuestMode, enableGuestMode } from '@/lib/guest'
 import { generateRoomCode } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 
@@ -68,8 +68,8 @@ function FloatingCard({ suit, rank, className, delay }: { suit: string; rank: st
 
 function HeroSection() {
   const router = useRouter()
-  const { user, isGuest } = useAuthStore()
-  const isSignedIn = !!user || isGuest
+  const { user, isLoading } = useAuthStore()
+  const isSignedIn = !!user && !isLoading
   const [joinOpen, setJoinOpen] = useState(false)
   const [roomCode, setRoomCode] = useState('')
   const [joining, setJoining] = useState(false)
@@ -385,8 +385,8 @@ const CATEGORIES = [
 
 function GameShowcase() {
   const router = useRouter()
-  const { user, isGuest } = useAuthStore()
-  const isSignedIn = !!user && !isGuest
+  const { user } = useAuthStore()
+  const isSignedIn = !!user
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState('all')
   const [creatingGame, setCreatingGame] = useState<string | null>(null)
@@ -599,8 +599,8 @@ function Footer() {
 }
 
 function NavBar() {
-  const { user, isGuest } = useAuthStore()
-  const isSignedIn = !!user && !isGuest
+  const { user, isLoading } = useAuthStore()
+  const isSignedIn = !!user
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 px-4 py-4">
@@ -609,19 +609,21 @@ function NavBar() {
           <DeckLogo />
           <span className="text-lg font-semibold text-text-primary">Deck</span>
         </Link>
-        <div className="flex items-center gap-3">
-          {isSignedIn ? (
-            <>
-              <AnimatedButton href="/profile" variant="ghost" size="sm">Profile</AnimatedButton>
-              <AnimatedButton href="/leaderboard" variant="ghost" size="sm">Leaderboard</AnimatedButton>
-            </>
-          ) : (
-            <>
-              <AnimatedButton href="/login" variant="ghost" size="sm">Sign In</AnimatedButton>
-              <AnimatedButton href="/signup" size="sm">Sign Up</AnimatedButton>
-            </>
-          )}
-        </div>
+        {!isLoading && (
+          <div className="flex items-center gap-3">
+            {isSignedIn ? (
+              <>
+                <AnimatedButton href="/profile" variant="ghost" size="sm">Profile</AnimatedButton>
+                <AnimatedButton href="/leaderboard" variant="ghost" size="sm">Leaderboard</AnimatedButton>
+              </>
+            ) : (
+              <>
+                <AnimatedButton href="/login" variant="ghost" size="sm">Sign In</AnimatedButton>
+                <AnimatedButton href="/signup" size="sm">Sign Up</AnimatedButton>
+              </>
+            )}
+          </div>
+        )}
       </div>
     </nav>
   )

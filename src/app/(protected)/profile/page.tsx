@@ -6,6 +6,7 @@ import { motion } from 'framer-motion'
 import { useAuthStore } from '@/stores/auth-store'
 import { useUIStore } from '@/stores/ui-store'
 import { createClient } from '@/lib/supabase/client'
+import { getGameStatLabels } from '@/lib/stats'
 import {
   AnimatedButton,
   GlassPanel,
@@ -46,6 +47,8 @@ export default function ProfilePage() {
   const [displayName, setDisplayName] = useState(user?.display_name || '')
   const [saving, setSaving] = useState(false)
   const [gameStats, setGameStats] = useState<GameStatRow[]>([])
+  const totalGamesPlayed = gameStats.reduce((sum, stat) => sum + stat.games_played, 0)
+  const totalGamesWon = gameStats.reduce((sum, stat) => sum + stat.games_won, 0)
 
   useEffect(() => {
     if (!user || isGuest) return
@@ -115,8 +118,8 @@ export default function ProfilePage() {
   }
 
   const stats = [
-    { label: 'Games Played', value: user?.games_played || 0, icon: <Gamepad2 className="h-4 w-4" /> },
-    { label: 'Games Won', value: user?.games_won || 0, icon: <Trophy className="h-4 w-4" /> },
+    { label: 'Games Played', value: totalGamesPlayed, icon: <Gamepad2 className="h-4 w-4" /> },
+    { label: 'Games Won', value: totalGamesWon, icon: <Trophy className="h-4 w-4" /> },
     { label: 'Chip Balance', value: user?.chips_balance?.toLocaleString() || '10,000', icon: <Coins className="h-4 w-4" /> },
   ]
 
@@ -214,6 +217,7 @@ export default function ProfilePage() {
               <div className="space-y-2">
                 {gameStats.map((gs) => {
                   const winRate = gs.games_played > 0 ? ((gs.games_won / gs.games_played) * 100).toFixed(0) : '0'
+                  const labels = getGameStatLabels(gs.game_type as 'blackjack' | 'poker' | 'uno' | 'hot-potato')
                   return (
                     <GlassPanel key={gs.game_type} className="p-4 flex items-center justify-between">
                       <div>
@@ -221,7 +225,7 @@ export default function ProfilePage() {
                           {GAME_LABELS[gs.game_type] || gs.game_type}
                         </p>
                         <p className="text-xs text-text-tertiary">
-                          {gs.games_won} win{gs.games_won !== 1 ? 's' : ''} · {gs.games_played} played
+                          {gs.games_won} {labels.wonNoun}{gs.games_won === 1 ? '' : 's'} · {gs.games_played} {labels.playedNoun}{gs.games_played === 1 ? '' : 's'}
                         </p>
                       </div>
                       <span className="text-lg font-bold text-accent-light">{winRate}%</span>

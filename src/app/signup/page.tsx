@@ -4,10 +4,9 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
-import { createClient, getRememberMe, setRememberMe } from '@/lib/supabase/client'
+import { createClient } from '@/lib/supabase/client'
 import { AuthCard, AnimatedButton, PremiumInput, DeckLogo } from '@/components/ui'
 import { useUIStore } from '@/stores/ui-store'
-import { enableGuestMode, clearGuestMode } from '@/lib/guest'
 import { Mail, Lock, User, CheckCircle2 } from 'lucide-react'
 
 export default function SignupPage() {
@@ -20,7 +19,6 @@ export default function SignupPage() {
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
   const [errors, setErrors] = useState<{ email?: string; password?: string; displayName?: string }>({})
-  const [rememberMe, setRememberMeState] = useState(() => getRememberMe())
 
   function validate() {
     const e: typeof errors = {}
@@ -39,43 +37,35 @@ export default function SignupPage() {
     if (!validate()) return
 
     setLoading(true)
-    try {
-      setRememberMe(rememberMe)
-      const supabase = createClient()
+    const supabase = createClient()
 
-      const { data, error } = await Promise.race([
-        supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            data: { display_name: displayName.trim() },
-            emailRedirectTo: `${window.location.origin}/auth/callback`,
-          },
-        }),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Request timed out — check your connection and try again.')), 15_000)
-        ),
-      ])
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { display_name: displayName.trim() },
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
+      },
+    })
 
-      if (error) {
-        addToast({ type: 'error', title: 'Signup failed', message: error.message })
-        return
-      }
+    console.log('[signup] signUp →', error ? `error: ${error.message}` : `user: ${data.user?.id}, session: ${!!data.session}`)
 
-      if (data.user && !data.session) {
-        setSuccess(true)
-        addToast({ type: 'info', title: 'Confirm your email', message: 'Check your inbox and click the link to activate your account.' })
-      } else if (data.session) {
-        clearGuestMode()
-        addToast({ type: 'success', title: 'Account created!' })
-        router.replace('/')
-        router.refresh()
-      }
-    } catch (err) {
-      addToast({ type: 'error', title: 'Signup failed', message: err instanceof Error ? err.message : 'Something went wrong' })
-    } finally {
+    if (error) {
+      addToast({ type: 'error', title: 'Signup failed', message: error.message })
       setLoading(false)
+      return
     }
+
+    if (data.user && !data.session) {
+      setSuccess(true)
+      addToast({ type: 'info', title: 'Confirm your email', message: 'Check your inbox and click the link to activate your account.' })
+    } else if (data.session) {
+      addToast({ type: 'success', title: 'Account created!' })
+      router.replace('/')
+      router.refresh()
+    }
+
+    setLoading(false)
   }
 
   return (
@@ -135,17 +125,6 @@ export default function SignupPage() {
             autoComplete="new-password"
           />
 
-          <label className="flex items-center gap-2 text-xs text-text-secondary select-none">
-            <input
-              type="checkbox"
-              checked={rememberMe}
-              onChange={(e) => setRememberMeState(e.target.checked)}
-              className="accent-accent"
-              disabled={loading}
-            />
-            Remember me
-          </label>
-
           <div className="pt-2">
             <AnimatedButton type="submit" loading={loading} className="w-full">
               Create Account
@@ -160,15 +139,6 @@ export default function SignupPage() {
           Sign in
         </Link>
       </p>
-
-      <div className="mt-4 pt-4 border-t border-white/[0.06]">
-        <button
-          onClick={() => { enableGuestMode(); router.push('/') }}
-          className="w-full text-center text-sm text-text-tertiary hover:text-text-secondary transition-colors py-2"
-        >
-          Skip for now — play as guest
-        </button>
-      </div>
     </AuthCard>
   )
 }

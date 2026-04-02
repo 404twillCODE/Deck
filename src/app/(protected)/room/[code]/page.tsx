@@ -21,7 +21,15 @@ import { HotPotatoTable } from '@/components/game/hot-potato-table'
 import { ArrowLeft, Copy, Users, Play, Loader2, RefreshCw } from 'lucide-react'
 import Link from 'next/link'
 import { recordGameResult } from '@/lib/stats'
-import type { ServerMessage, RoomState } from '@/types'
+import type {
+  BlackjackState,
+  GameType,
+  HotPotatoState,
+  PokerState,
+  RoomState,
+  ServerMessage,
+  UnoState,
+} from '@/types'
 
 function useStatsRecorder() {
   const roomState = useGameStore((s) => s.roomState)
@@ -32,22 +40,33 @@ function useStatsRecorder() {
     if (!roomState?.gameState || !user || isGuest) return
 
     const gs = roomState.gameState
-    const gameType = roomState.gameType
-    let isComplete = false
-    let winnerId: string | null = null
-
-    if ('phase' in gs && gs.phase === 'complete') {
-      isComplete = true
-      if ('winnerId' in gs) winnerId = gs.winnerId as string | null
-    }
-
-    if (!isComplete) return
+    const gameType = roomState.gameType as GameType
+    if (!('phase' in gs) || gs.phase !== 'complete') return
 
     const roundKey = `${gameType}-${('roundNumber' in gs ? gs.roundNumber : 0)}`
     if (recordedRef.current === roundKey) return
-    recordedRef.current = roundKey
 
-    const won = winnerId === user.id
+    let won = false
+
+    if (gameType === 'blackjack') {
+      const blackjackState = gs as BlackjackState
+      const player = blackjackState.players.find((p) => p.id === user.id)
+      if (!player) return
+      won = player.result === 'win' || player.result === 'blackjack'
+    } else if (gameType === 'poker') {
+      const pokerState = gs as PokerState
+      const player = pokerState.players.find((p) => p.id === user.id)
+      if (!player) return
+      won = player.result === 'win' || (player.winnings ?? 0) > 0
+    } else if (gameType === 'uno') {
+      const unoState = gs as UnoState
+      won = unoState.winnerId === user.id
+    } else if (gameType === 'hot-potato') {
+      const hotPotatoState = gs as HotPotatoState
+      won = hotPotatoState.winnerId === user.id
+    }
+
+    recordedRef.current = roundKey
     recordGameResult(user.id, gameType, won).catch(() => {})
   }, [roomState?.gameState, roomState?.gameType, user, isGuest])
 }
