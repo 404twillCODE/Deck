@@ -1,14 +1,13 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { motion, useScroll, useTransform, AnimatePresence } from 'framer-motion'
-import { useRef } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { AnimatedButton, DeckLogo } from '@/components/ui'
 import { ArrowRight, Users, Shield, Zap, Sparkles, Search, Loader2 } from 'lucide-react'
-import { isGuestMode, enableGuestMode } from '@/lib/guest'
-import { generateRoomCode } from '@/lib/utils'
+import { generateRoomCode, normalizeRoomCodeInput, looksLikeRoomCode } from '@/lib/utils'
+import { joinRoomByCode } from '@/lib/room-join'
 import { useAuthStore } from '@/stores/auth-store'
 
 function FloatingCard({ suit, rank, className, delay }: { suit: string; rank: string; className?: string; delay?: number }) {
@@ -73,6 +72,7 @@ function HeroSection() {
   const [joinOpen, setJoinOpen] = useState(false)
   const [roomCode, setRoomCode] = useState('')
   const [joining, setJoining] = useState(false)
+  const lastAutoJoinedRef = useRef('')
 
   function handleGetStarted() {
     if (isSignedIn) {
@@ -83,28 +83,13 @@ function HeroSection() {
   }
 
   async function handleJoin() {
-    const code = roomCode.trim().toUpperCase()
-    if (!code || code.length < 4) return
+    const code = normalizeRoomCodeInput(roomCode)
+    if (code.length < 4) return
     setJoining(true)
-
-    if (!isGuestMode()) {
-      enableGuestMode()
-    }
-
     try {
-      let workerUrl = process.env.NEXT_PUBLIC_WORKER_URL || 'http://localhost:8787'
-      if (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-        workerUrl = workerUrl.replace('localhost', window.location.hostname).replace('127.0.0.1', window.location.hostname)
-      }
-      const res = await fetch(`${workerUrl}/api/rooms/${code}`)
-      if (res.ok) {
-        const data = await res.json() as { gameType: string }
-        router.push(`/room/${code}?game=${data.gameType}`)
-      } else {
-        router.push(`/room/${code}?game=blackjack`)
-      }
-    } catch {
-      router.push(`/room/${code}?game=blackjack`)
+      await joinRoomByCode(code, router)
+    } finally {
+      setJoining(false)
     }
   }
 
@@ -187,7 +172,22 @@ function HeroSection() {
                     type="text"
                     placeholder="Room code"
                     value={roomCode}
-                    onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
+                    onChange={(e) => {
+                      const v = normalizeRoomCodeInput(e.target.value)
+                      if (v.length < 6) lastAutoJoinedRef.current = ''
+                      setRoomCode(v)
+                      if (v.length === 6 && lastAutoJoinedRef.current !== v) {
+                        lastAutoJoinedRef.current = v
+                        void (async () => {
+                          setJoining(true)
+                          try {
+                            await joinRoomByCode(v, router)
+                          } finally {
+                            setJoining(false)
+                          }
+                        })()
+                      }
+                    }}
                     onKeyDown={(e) => e.key === 'Enter' && handleJoin()}
                     maxLength={6}
                     autoFocus
@@ -390,9 +390,29 @@ function GameShowcase() {
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState('all')
   const [creatingGame, setCreatingGame] = useState<string | null>(null)
+  const [libraryJoining, setLibraryJoining] = useState(false)
+  const lastLibraryJoinRef = useRef<string>('')
+
+  const codeQuery = looksLikeRoomCode(search)
+
+  useEffect(() => {
+    if (!codeQuery) {
+      lastLibraryJoinRef.current = ''
+      return
+    }
+    const n = normalizeRoomCodeInput(search)
+    const t = window.setTimeout(() => {
+      if (lastLibraryJoinRef.current === n) return
+      lastLibraryJoinRef.current = n
+      setLibraryJoining(true)
+      void joinRoomByCode(n, router).finally(() => setLibraryJoining(false))
+    }, 250)
+    return () => clearTimeout(t)
+  }, [search, codeQuery, router])
 
   const filtered = GAMES.filter((g) => {
     if (category !== 'all' && g.category !== category) return false
+    if (codeQuery) return true
     if (search && !g.name.toLowerCase().includes(search.toLowerCase())) return false
     return true
   })
@@ -445,12 +465,16 @@ function GameShowcase() {
           </p>
         </motion.div>
 
-        {/* Search */}
+        {/* Search — game names or a 6-character room code */}
         <div className="relative max-w-md mx-auto mb-8">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-text-tertiary pointer-events-none" />
+          {libraryJoining ? (
+            <Loader2 className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-accent-light animate-spin pointer-events-none" />
+          ) : (
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-text-tertiary pointer-events-none" />
+          )}
           <input
             type="text"
-            placeholder="Search games..."
+            placeholder="Search games or enter a room code…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full pl-11 pr-4 py-3 rounded-xl glass text-text-primary placeholder:text-text-tertiary text-sm focus:outline-none focus:ring-1 focus:ring-accent/30 bg-transparent"
