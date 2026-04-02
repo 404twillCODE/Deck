@@ -29,7 +29,9 @@ function isPrivateDevOrigin(origin: string): boolean {
 function pickCorsOrigin(origin: string | null, env: Env): string {
   if (!origin) return ''
   if (ALLOWED_ORIGINS.has(origin)) return origin
-  if (env.ENVIRONMENT === 'development' && isPrivateDevOrigin(origin)) return origin
+  // Allow private-network origins (localhost/LAN) for local dev/testing.
+  // This avoids brittle dependence on ENVIRONMENT being set correctly.
+  if (isPrivateDevOrigin(origin)) return origin
   return ''
 }
 

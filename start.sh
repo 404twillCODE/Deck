@@ -33,7 +33,7 @@ echo ""
 # ─── Start worker in background ───────────────────
 echo "[3/4] Starting Cloudflare Worker on port 8787..."
 cd "$ROOT_DIR/worker"
-npx wrangler dev --ip 0.0.0.0 --port 8787 2>&1 | sed 's/^/   [worker] /' &
+ENVIRONMENT=development npx wrangler dev --config wrangler.toml --ip 0.0.0.0 --port 8787 2>&1 | sed 's/^/   [worker] /' &
 WORKER_PID=$!
 echo "   Worker started (PID $WORKER_PID)"
 echo ""

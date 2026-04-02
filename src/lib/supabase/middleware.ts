@@ -25,27 +25,5 @@ export async function updateSession(request: NextRequest) {
     }
   )
 
-  let user = null
-  try {
-    const { data } = await supabase.auth.getUser()
-    user = data.user
-  } catch {
-    // If auth check fails, treat as unauthenticated
-  }
-
-  const protectedPaths = ['/room', '/profile', '/leaderboard']
-  const isProtected = protectedPaths.some((path) =>
-    request.nextUrl.pathname.startsWith(path)
-  )
-
-  const isGuest = request.cookies.has('deck_guest')
-
-  if (isProtected && !user && !isGuest) {
-    const url = request.nextUrl.clone()
-    url.pathname = '/login'
-    url.searchParams.set('redirect', request.nextUrl.pathname)
-    return NextResponse.redirect(url)
-  }
-
   return supabaseResponse
 }

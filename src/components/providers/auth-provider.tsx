@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { createClient, SUPABASE_STORAGE_KEY } from '@/lib/supabase/client'
 import { useAuthStore } from '@/stores/auth-store'
 import { isGuestMode, getGuestProfile } from '@/lib/guest'
 import type { UserProfile } from '@/types'
@@ -53,7 +53,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } else {
           setUser(null)
         }
-      } catch {
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        // Only perform destructive recovery for known storage/lock failures.
+        if (msg.includes('NavigatorLock') || msg.toLowerCase().includes('lock')) {
+          try { localStorage.removeItem(SUPABASE_STORAGE_KEY) } catch { /* ignore */ }
+          try { sessionStorage.removeItem(SUPABASE_STORAGE_KEY) } catch { /* ignore */ }
+          try { await supabase.auth.signOut({ scope: 'local' }) } catch { /* ignore */ }
+        }
         setUser(null)
       } finally {
         setLoading(false)

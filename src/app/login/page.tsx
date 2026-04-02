@@ -4,8 +4,8 @@ import { Suspense, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
-import { createClient } from '@/lib/supabase/client'
-import { AuthCard, AnimatedButton, PremiumInput, DeckLogo, GuestNameModal } from '@/components/ui'
+import { createClient, getRememberMe, setRememberMe } from '@/lib/supabase/client'
+import { AuthCard, AnimatedButton, PremiumInput, DeckLogo } from '@/components/ui'
 import { useUIStore } from '@/stores/ui-store'
 import { enableGuestMode, clearGuestMode } from '@/lib/guest'
 import { Mail, Lock, Wand2 } from 'lucide-react'
@@ -21,7 +21,7 @@ function LoginContent() {
   const [loading, setLoading] = useState(false)
   const [magicLinkSent, setMagicLinkSent] = useState(false)
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({})
-  const [guestOpen, setGuestOpen] = useState(false)
+  const [rememberMe, setRememberMeState] = useState(() => getRememberMe())
 
   function validate() {
     const e: typeof errors = {}
@@ -39,6 +39,7 @@ function LoginContent() {
 
     setLoading(true)
     try {
+      setRememberMe(rememberMe)
       const supabase = createClient()
 
       const { error } = await Promise.race([
@@ -110,19 +111,6 @@ function LoginContent() {
 
   return (
     <AuthCard>
-      <GuestNameModal
-        open={guestOpen}
-        onClose={() => setGuestOpen(false)}
-        onConfirm={(name) => {
-          try {
-            enableGuestMode(name)
-            setGuestOpen(false)
-            router.push('/')
-          } catch (e) {
-            addToast({ type: 'error', title: 'Guest mode failed', message: e instanceof Error ? e.message : 'Try again' })
-          }
-        }}
-      />
       <div className="text-center mb-8">
         <Link href="/" className="inline-flex items-center gap-2 mb-6">
           <DeckLogo size="lg" />
@@ -174,6 +162,17 @@ function LoginContent() {
             autoComplete="current-password"
           />
 
+          <label className="flex items-center gap-2 text-xs text-text-secondary select-none">
+            <input
+              type="checkbox"
+              checked={rememberMe}
+              onChange={(e) => setRememberMeState(e.target.checked)}
+              className="accent-accent"
+              disabled={loading}
+            />
+            Remember me
+          </label>
+
           <div className="pt-2 space-y-3">
             <AnimatedButton type="submit" loading={loading} className="w-full">
               Sign In
@@ -202,7 +201,7 @@ function LoginContent() {
 
       <div className="mt-4 pt-4 border-t border-white/[0.06]">
         <button
-          onClick={() => setGuestOpen(true)}
+          onClick={() => { enableGuestMode(); router.push('/') }}
           className="w-full text-center text-sm text-text-tertiary hover:text-text-secondary transition-colors py-2"
         >
           Skip for now — play as guest

@@ -15,7 +15,24 @@ function CreateRoomContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { addToast } = useUIStore()
-  const { user } = useAuthStore()
+  const { user, isGuest } = useAuthStore()
+
+  if (isGuest) {
+    return (
+      <div className="min-h-dvh flex items-center justify-center px-4">
+        <GlassPanel className="p-8 text-center max-w-sm space-y-4">
+          <h2 className="text-xl font-bold text-text-primary">Guests can&apos;t host</h2>
+          <p className="text-sm text-text-secondary">
+            Create an account to host your own game rooms. You can still join games with a room code.
+          </p>
+          <div className="flex gap-3 justify-center pt-2">
+            <AnimatedButton href="/signup">Sign Up</AnimatedButton>
+            <AnimatedButton href="/" variant="ghost">Back</AnimatedButton>
+          </div>
+        </GlassPanel>
+      </div>
+    )
+  }
 
   const initialGame = (searchParams.get('game') as GameType) || 'blackjack'
   const [gameType, setGameType] = useState<GameType>(initialGame)

@@ -57,7 +57,9 @@ function RoomContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const code = (params.code as string).toUpperCase()
-  const gameTypeParam = searchParams.get('game') || 'blackjack'
+  const gameTypeQuery = searchParams.get('game')
+  const [resolvedGameType, setResolvedGameType] = useState<string | null>(gameTypeQuery)
+  const gameTypeParam = resolvedGameType || 'blackjack'
 
   const { user } = useAuthStore()
   const addToast = useUIStore((s) => s.addToast)
@@ -77,6 +79,38 @@ function RoomContent() {
   const [connStatus, setConnStatus] = useState<'connecting' | 'connected' | 'reconnecting' | 'failed'>('connecting')
   const wsRef = useRef<GameWebSocket | null>(null)
   const mountedRef = useRef(true)
+
+  // If someone opens a room link without ?game=..., resolve it via the worker
+  // before attempting the websocket connection. This is critical when joining
+  // a poker/uno/etc room from a login redirect or shared link.
+  useEffect(() => {
+    const cur = searchParams.get('game')
+    if (cur) {
+      setResolvedGameType(cur)
+      return
+    }
+
+    let cancelled = false
+    ;(async () => {
+      try {
+        let workerUrl = process.env.NEXT_PUBLIC_WORKER_URL || 'http://localhost:8787'
+        if (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+          workerUrl = workerUrl.replace('localhost', window.location.hostname).replace('127.0.0.1', window.location.hostname)
+        }
+        const res = await fetch(`${workerUrl}/api/rooms/${code}`)
+        const data = res.ok ? await res.json() as { gameType?: string } : null
+        const gt = data?.gameType || 'blackjack'
+        if (cancelled) return
+        setResolvedGameType(gt)
+        router.replace(`/room/${code}?game=${encodeURIComponent(gt)}`)
+      } catch {
+        if (cancelled) return
+        setResolvedGameType('blackjack')
+      }
+    })()
+
+    return () => { cancelled = true }
+  }, [code, router, searchParams])
 
   const doConnect = useCallback(async (ws: GameWebSocket) => {
     try {
@@ -107,6 +141,7 @@ function RoomContent() {
   }, [code, gameTypeParam, user?.display_name, user?.username, setConnectionError])
 
   useEffect(() => {
+    if (!resolvedGameType) return
     mountedRef.current = true
     const ws = new GameWebSocket()
     wsRef.current = ws
@@ -188,7 +223,7 @@ function RoomContent() {
       resetStore()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [code, gameTypeParam])
+  }, [code, gameTypeParam, resolvedGameType])
 
   const isHost = roomState?.hostId === user?.id
   const allReady = roomState?.players?.every((p) => p.isReady) && (roomState?.players?.length ?? 0) >= 2
