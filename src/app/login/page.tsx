@@ -5,9 +5,9 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
 import { createClient } from '@/lib/supabase/client'
-import { AuthCard, AnimatedButton, PremiumInput, DeckLogo } from '@/components/ui'
+import { AuthCard, AnimatedButton, PremiumInput, DeckLogo, GuestNameModal } from '@/components/ui'
 import { useUIStore } from '@/stores/ui-store'
-import { enableGuestMode } from '@/lib/guest'
+import { enableGuestMode, clearGuestMode } from '@/lib/guest'
 import { Mail, Lock, Wand2 } from 'lucide-react'
 
 function LoginContent() {
@@ -21,6 +21,7 @@ function LoginContent() {
   const [loading, setLoading] = useState(false)
   const [magicLinkSent, setMagicLinkSent] = useState(false)
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({})
+  const [guestOpen, setGuestOpen] = useState(false)
 
   function validate() {
     const e: typeof errors = {}
@@ -58,8 +59,15 @@ function LoginContent() {
         return
       }
 
+      // If they previously used guest mode, stop treating them as a guest.
+      clearGuestMode()
+
+      // Ensure the session is actually persisted before navigating.
+      await supabase.auth.getSession()
+
       addToast({ type: 'success', title: 'Welcome back!' })
-      router.push(redirect)
+      router.replace(redirect)
+      router.refresh()
     } catch (err) {
       addToast({ type: 'error', title: 'Sign in failed', message: err instanceof Error ? err.message : 'Something went wrong' })
     } finally {
@@ -74,26 +82,47 @@ function LoginContent() {
     }
 
     setLoading(true)
-    const supabase = createClient()
+    try {
+      const supabase = createClient()
+      const { error } = await Promise.race([
+        supabase.auth.signInWithOtp({
+          email,
+          options: { emailRedirectTo: `${window.location.origin}${redirect}` },
+        }),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Request timed out — check your connection and try again.')), 15_000)
+        ),
+      ])
 
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: `${window.location.origin}${redirect}` },
-    })
+      if (error) {
+        addToast({ type: 'error', title: 'Failed to send magic link', message: error.message })
+        return
+      }
 
-    setLoading(false)
-
-    if (error) {
-      addToast({ type: 'error', title: 'Failed to send magic link', message: error.message })
-      return
+      setMagicLinkSent(true)
+      addToast({ type: 'success', title: 'Magic link sent!', message: 'Check your email' })
+    } catch (err) {
+      addToast({ type: 'error', title: 'Failed to send magic link', message: err instanceof Error ? err.message : 'Something went wrong' })
+    } finally {
+      setLoading(false)
     }
-
-    setMagicLinkSent(true)
-    addToast({ type: 'success', title: 'Magic link sent!', message: 'Check your email' })
   }
 
   return (
     <AuthCard>
+      <GuestNameModal
+        open={guestOpen}
+        onClose={() => setGuestOpen(false)}
+        onConfirm={(name) => {
+          try {
+            enableGuestMode(name)
+            setGuestOpen(false)
+            router.push('/')
+          } catch (e) {
+            addToast({ type: 'error', title: 'Guest mode failed', message: e instanceof Error ? e.message : 'Try again' })
+          }
+        }}
+      />
       <div className="text-center mb-8">
         <Link href="/" className="inline-flex items-center gap-2 mb-6">
           <DeckLogo size="lg" />
@@ -173,7 +202,7 @@ function LoginContent() {
 
       <div className="mt-4 pt-4 border-t border-white/[0.06]">
         <button
-          onClick={() => { enableGuestMode(); router.push('/') }}
+          onClick={() => setGuestOpen(true)}
           className="w-full text-center text-sm text-text-tertiary hover:text-text-secondary transition-colors py-2"
         >
           Skip for now — play as guest

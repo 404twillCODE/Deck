@@ -16,7 +16,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     void (async () => {
       setLoading(true)
       try {
-        const { data: { user } } = await supabase.auth.getUser()
+        // Prefer local session hydration to avoid a network round-trip
+        // and reduce cases where UI looks "stuck" after sign-in.
+        const { data: sessionData } = await supabase.auth.getSession()
+        const user = sessionData.session?.user ?? null
 
         if (user) {
           const { data: profile } = await supabase

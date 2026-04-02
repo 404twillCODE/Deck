@@ -43,3 +43,10 @@ next-env.d.ts
 .turbo
 *.pem
 coverage/
+
+# OpenNext
+.open-next
+
+.dev.vars*
+!.dev.vars.example
+!.env.example

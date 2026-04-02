@@ -3,7 +3,10 @@ const LS_ID_KEY = 'deck_guest_id'
 const LS_NAME_KEY = 'deck_guest_name'
 
 export function enableGuestMode(name?: string) {
-  const displayName = name?.trim() || `Guest #${Math.floor(Math.random() * 9000 + 1000)}`
+  const displayName = name?.trim()
+  if (!displayName || displayName.length < 2) {
+    throw new Error('Guest name is required')
+  }
   let guestId = typeof window !== 'undefined' ? localStorage.getItem(LS_ID_KEY) : null
   if (!guestId) {
     guestId = `guest-${crypto.randomUUID()}`

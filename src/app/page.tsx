@@ -5,7 +5,7 @@ import { motion, useScroll, useTransform, AnimatePresence } from 'framer-motion'
 import { useRef } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { AnimatedButton, DeckLogo } from '@/components/ui'
+import { AnimatedButton, DeckLogo, GuestNameModal } from '@/components/ui'
 import { ArrowRight, Users, Shield, Zap, Sparkles, Search, Loader2 } from 'lucide-react'
 import { enableGuestMode, isGuestMode } from '@/lib/guest'
 import { generateRoomCode } from '@/lib/utils'
@@ -73,6 +73,8 @@ function HeroSection() {
   const [joinOpen, setJoinOpen] = useState(false)
   const [roomCode, setRoomCode] = useState('')
   const [joining, setJoining] = useState(false)
+  const [guestOpen, setGuestOpen] = useState(false)
+  const [pendingJoin, setPendingJoin] = useState(false)
 
   function handleGetStarted() {
     if (isSignedIn) {
@@ -82,14 +84,10 @@ function HeroSection() {
     }
   }
 
-  async function handleJoin() {
+  async function doJoin() {
     const code = roomCode.trim().toUpperCase()
     if (!code || code.length < 4) return
     setJoining(true)
-
-    if (!isGuestMode()) {
-      enableGuestMode()
-    }
 
     try {
       let workerUrl = process.env.NEXT_PUBLIC_WORKER_URL || 'http://localhost:8787'
@@ -108,8 +106,33 @@ function HeroSection() {
     }
   }
 
+  async function handleJoin() {
+    const code = roomCode.trim().toUpperCase()
+    if (!code || code.length < 4) return
+
+    if (!isSignedIn && !isGuestMode()) {
+      setPendingJoin(true)
+      setGuestOpen(true)
+      return
+    }
+
+    await doJoin()
+  }
+
   return (
     <section className="relative min-h-dvh flex items-center justify-center overflow-hidden px-4">
+      <GuestNameModal
+        open={guestOpen}
+        onClose={() => { setGuestOpen(false); setPendingJoin(false) }}
+        onConfirm={(name) => {
+          enableGuestMode(name)
+          setGuestOpen(false)
+          if (pendingJoin) {
+            setPendingJoin(false)
+            void doJoin()
+          }
+        }}
+      />
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(99,102,241,0.12),transparent_60%)]" />
 
       <FloatingCard suit="♠" rank="A" className="top-[15%] left-[8%] md:left-[15%] -rotate-12 opacity-60" delay={0.2} />
@@ -386,10 +409,12 @@ const CATEGORIES = [
 function GameShowcase() {
   const router = useRouter()
   const { user, isGuest } = useAuthStore()
-  const isSignedIn = !!user && !isGuest
+  const canPlayNow = !!user || isGuest
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState('all')
   const [creatingGame, setCreatingGame] = useState<string | null>(null)
+  const [guestOpen, setGuestOpen] = useState(false)
+  const [pendingGameId, setPendingGameId] = useState<string | null>(null)
 
   const filtered = GAMES.filter((g) => {
     if (category !== 'all' && g.category !== category) return false
@@ -398,8 +423,9 @@ function GameShowcase() {
   })
 
   const handlePlayGame = useCallback(async (gameId: string) => {
-    if (!isSignedIn) {
-      router.push(`/signup?game=${gameId}`)
+    if (!canPlayNow) {
+      setPendingGameId(gameId)
+      setGuestOpen(true)
       return
     }
 
@@ -427,10 +453,23 @@ function GameShowcase() {
     } catch {
       setCreatingGame(null)
     }
-  }, [isSignedIn, creatingGame, router])
+  }, [canPlayNow, creatingGame, router])
 
   return (
     <section id="game-library" className="relative py-32 px-4">
+      <GuestNameModal
+        open={guestOpen}
+        onClose={() => { setGuestOpen(false); setPendingGameId(null) }}
+        onConfirm={(name) => {
+          enableGuestMode(name)
+          setGuestOpen(false)
+          const gameId = pendingGameId
+          setPendingGameId(null)
+          if (gameId) void handlePlayGame(gameId)
+        }}
+        title="Play now as guest"
+        description="Enter a name so other players know who you are."
+      />
       <div className="max-w-5xl mx-auto">
         <motion.div
           className="text-center mb-10"

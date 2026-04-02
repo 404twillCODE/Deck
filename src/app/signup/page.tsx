@@ -5,9 +5,9 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
 import { createClient } from '@/lib/supabase/client'
-import { AuthCard, AnimatedButton, PremiumInput, DeckLogo } from '@/components/ui'
+import { AuthCard, AnimatedButton, PremiumInput, DeckLogo, GuestNameModal } from '@/components/ui'
 import { useUIStore } from '@/stores/ui-store'
-import { enableGuestMode } from '@/lib/guest'
+import { enableGuestMode, clearGuestMode } from '@/lib/guest'
 import { Mail, Lock, User, CheckCircle2 } from 'lucide-react'
 
 export default function SignupPage() {
@@ -20,6 +20,7 @@ export default function SignupPage() {
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
   const [errors, setErrors] = useState<{ email?: string; password?: string; displayName?: string }>({})
+  const [guestOpen, setGuestOpen] = useState(false)
 
   function validate() {
     const e: typeof errors = {}
@@ -64,8 +65,10 @@ export default function SignupPage() {
         setSuccess(true)
         addToast({ type: 'info', title: 'Confirm your email', message: 'Check your inbox and click the link to activate your account.' })
       } else if (data.session) {
+        clearGuestMode()
         addToast({ type: 'success', title: 'Account created!' })
-        router.push('/')
+        router.replace('/')
+        router.refresh()
       }
     } catch (err) {
       addToast({ type: 'error', title: 'Signup failed', message: err instanceof Error ? err.message : 'Something went wrong' })
@@ -76,6 +79,19 @@ export default function SignupPage() {
 
   return (
     <AuthCard>
+      <GuestNameModal
+        open={guestOpen}
+        onClose={() => setGuestOpen(false)}
+        onConfirm={(name) => {
+          try {
+            enableGuestMode(name)
+            setGuestOpen(false)
+            router.push('/')
+          } catch (e) {
+            addToast({ type: 'error', title: 'Guest mode failed', message: e instanceof Error ? e.message : 'Try again' })
+          }
+        }}
+      />
       <div className="text-center mb-8">
         <Link href="/" className="inline-flex items-center gap-2 mb-6">
           <DeckLogo size="lg" />
@@ -148,7 +164,7 @@ export default function SignupPage() {
 
       <div className="mt-4 pt-4 border-t border-white/[0.06]">
         <button
-          onClick={() => { enableGuestMode(); router.push('/') }}
+          onClick={() => setGuestOpen(true)}
           className="w-full text-center text-sm text-text-tertiary hover:text-text-secondary transition-colors py-2"
         >
           Skip for now — play as guest

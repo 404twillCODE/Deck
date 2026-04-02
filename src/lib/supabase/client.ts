@@ -20,6 +20,10 @@ export function createClient() {
     throw new Error('Supabase env vars missing: set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY')
   }
 
+  if (!/^https?:\/\//.test(url)) {
+    throw new Error('Supabase URL is invalid: NEXT_PUBLIC_SUPABASE_URL must start with http:// or https://')
+  }
+
   if (typeof window !== 'undefined' && browserClient) {
     return browserClient
   }
