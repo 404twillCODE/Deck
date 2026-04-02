@@ -44,7 +44,7 @@ export default function SignupPage() {
       password,
       options: {
         data: { display_name: displayName.trim() },
-        emailRedirectTo: `${window.location.origin}/dashboard`,
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
       },
     })
 
@@ -59,6 +59,7 @@ export default function SignupPage() {
     } else {
       addToast({ type: 'success', title: 'Account created!' })
       router.push('/dashboard')
+      router.refresh()
     }
 
     setLoading(false)

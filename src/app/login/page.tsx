@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useState } from 'react'
+import { Suspense, useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
@@ -13,7 +13,14 @@ function LoginContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const redirect = searchParams.get('redirect') || '/dashboard'
+  const urlError = searchParams.get('error')
   const { addToast } = useUIStore()
+
+  useEffect(() => {
+    if (urlError) {
+      addToast({ type: 'error', title: 'Authentication failed', message: 'Please sign in again.' })
+    }
+  }, [urlError, addToast])
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -48,6 +55,7 @@ function LoginContent() {
 
     addToast({ type: 'success', title: 'Welcome back!' })
     router.push(redirect)
+    router.refresh()
   }
 
   async function handleMagicLink() {
@@ -61,7 +69,7 @@ function LoginContent() {
 
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: `${window.location.origin}${redirect}` },
+      options: { emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(redirect)}` },
     })
 
     setLoading(false)

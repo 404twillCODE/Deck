@@ -35,8 +35,10 @@ function ProfileChip() {
 
   async function handleLogout() {
     await supabase.auth.signOut()
+    useAuthStore.getState().reset()
     addToast({ type: 'info', title: 'Signed out' })
     router.push('/')
+    router.refresh()
   }
 
   if (isLoading) {

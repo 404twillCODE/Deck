@@ -1,63 +1,62 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useAuthStore } from '@/stores/auth-store'
 import type { UserProfile } from '@/types'
-import type { AuthChangeEvent, Session } from '@supabase/supabase-js'
+import type { AuthChangeEvent, Session, User } from '@supabase/supabase-js'
+
+function fallbackProfile(user: User): UserProfile {
+  return {
+    id: user.id,
+    email: user.email || '',
+    username: user.email?.split('@')[0] || 'player',
+    display_name: user.user_metadata?.display_name || 'Player',
+    chips_balance: 10000,
+    games_played: 0,
+    games_won: 0,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  }
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const { setUser, setLoading } = useAuthStore()
+  const initialised = useRef(false)
 
   useEffect(() => {
     const supabase = createClient()
+    setLoading(true)
 
-    void (async () => {
-      setLoading(true)
-      const { data: { user } } = await supabase.auth.getUser()
+    async function syncUser(user: User | null) {
+      if (!user) {
+        setUser(null)
+        return
+      }
 
-      if (user) {
+      try {
         const { data: profile } = await supabase
           .from('profiles')
           .select('*')
           .eq('id', user.id)
           .single()
 
-        if (profile) {
-          setUser(profile as UserProfile)
-        } else {
-          setUser({
-            id: user.id,
-            email: user.email || '',
-            username: user.email?.split('@')[0] || 'player',
-            display_name: user.user_metadata?.display_name || 'Player',
-            chips_balance: 10000,
-            games_played: 0,
-            games_won: 0,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          })
-        }
-      } else {
-        setUser(null)
+        setUser(profile ? (profile as UserProfile) : fallbackProfile(user))
+      } catch {
+        setUser(fallbackProfile(user))
       }
-    })()
+    }
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event: AuthChangeEvent, session: Session | null) => {
-        if (event === 'SIGNED_IN' && session?.user) {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', session.user.id)
-            .single()
-
-          if (profile) {
-            setUser(profile as UserProfile)
-          }
-        } else if (event === 'SIGNED_OUT') {
+        if (event === 'SIGNED_OUT') {
           setUser(null)
+          return
         }
+
+        // INITIAL_SESSION, SIGNED_IN, TOKEN_REFRESHED, USER_UPDATED
+        await syncUser(session?.user ?? null)
+        initialised.current = true
       }
     )
 

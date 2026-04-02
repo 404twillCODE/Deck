@@ -24,11 +24,7 @@ export function createClient() {
     return browserClient
   }
 
-  const client = createBrowserClient(url, anonKey, {
-    auth: {
-      lockAcquireTimeout: 120_000,
-    } as NonNullable<Parameters<typeof createBrowserClient>[2]>['auth'],
-  })
+  const client = createBrowserClient(url, anonKey)
 
   if (typeof window !== 'undefined') {
     browserClient = client
