@@ -1,0 +1,27 @@
+name = "deck"
+main = "worker/src/index.ts"
+compatibility_date = "2025-03-15"
+
+[durable_objects]
+bindings = [
+  { name = "BLACKJACK_TABLE", class_name = "BlackjackTableDO" },
+  { name = "POKER_TABLE", class_name = "PokerTableDO" },
+  { name = "UNO_TABLE", class_name = "UnoTableDO" },
+  { name = "HOT_POTATO_TABLE", class_name = "HotPotatoTableDO" }
+]
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["BlackjackTableDO", "PokerTableDO"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["UnoTableDO"]
+
+[[migrations]]
+tag = "v3"
+new_sqlite_classes = ["HotPotatoTableDO"]
+
+[vars]
+ENVIRONMENT = "production"
+
