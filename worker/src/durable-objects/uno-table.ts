@@ -433,6 +433,9 @@ export class UnoTableDO extends DurableObject<Env> {
       return
     }
 
+    // If you can play a card, you cannot draw — you must play (or end turn only when still nothing matches after drawing).
+    if (this.handHasPlayable(hand)) return
+
     // Normal draw — draw one card, stay on turn
     const card = this.drawCardFromPile()
     if (!card) {
@@ -460,6 +463,9 @@ export class UnoTableDO extends DurableObject<Env> {
     if (!current || current.id !== playerId) return
     if (!this.hasDrawnThisTurn) return
     if (this.pendingDraw > 0) return
+
+    const hand = this.playerHands.get(playerId)
+    if (hand && this.handHasPlayable(hand)) return
 
     this.lastAction = { playerId, action: 'end_turn' }
     this.advanceToNext()
@@ -492,9 +498,9 @@ export class UnoTableDO extends DurableObject<Env> {
   // ─── Card Rules ─────────────────────────────────────
 
   private canPlay(card: UnoCard): boolean {
-    // During a pending draw stack: +2 stacks on +2, +4 stacks on +4, +4 can stack on +2
+    // During a pending draw stack: +2 stacks on +2, +4 stacks on +4, +4 can stack on +2, +2 can stack on +4
     if (this.pendingDrawType === 'draw_two') return card.type === 'draw_two' || card.type === 'wild_draw_four'
-    if (this.pendingDrawType === 'wild_draw_four') return card.type === 'wild_draw_four'
+    if (this.pendingDrawType === 'wild_draw_four') return card.type === 'wild_draw_four' || card.type === 'draw_two'
 
     if (card.type === 'wild' || card.type === 'wild_draw_four') return true
     const top = this.discardPile[this.discardPile.length - 1]
@@ -503,6 +509,11 @@ export class UnoTableDO extends DurableObject<Env> {
     if (card.type === 'number' && top.type === 'number' && card.value === top.value) return true
     if (card.type !== 'number' && card.type === top.type) return true
     return false
+  }
+
+  /** True if the player can legally play at least one card from their hand. */
+  private handHasPlayable(hand: UnoCard[]): boolean {
+    return hand.some((c) => this.canPlay(c))
   }
 
   private applyEffect(card: UnoCard) {

@@ -205,7 +205,7 @@ export function UnoTable({ wsRef }: UnoTableProps) {
     (card: UnoCard) => {
       if (!gameState || !isMyTurn) return false
       if (gameState.pendingDrawType === 'draw_two') return card.type === 'draw_two' || card.type === 'wild_draw_four'
-      if (gameState.pendingDrawType === 'wild_draw_four') return card.type === 'wild_draw_four'
+      if (gameState.pendingDrawType === 'wild_draw_four') return card.type === 'wild_draw_four' || card.type === 'draw_two'
       if (card.type === 'wild' || card.type === 'wild_draw_four') return true
       if (card.color === gameState.currentColor) return true
       const top = gameState.discardTop
@@ -215,6 +215,8 @@ export function UnoTable({ wsRef }: UnoTableProps) {
     },
     [gameState, isMyTurn],
   )
+
+  const hasPlayableInHand = myCards.some((c) => canPlayCard(c))
 
   function handlePlayCard(card: UnoCard) {
     if (!canPlayCard(card)) return
@@ -235,8 +237,9 @@ export function UnoTable({ wsRef }: UnoTableProps) {
 
   const otherPlayers = gameState.players.filter((p) => p.id !== user?.id)
   const hasPending = gameState.pendingDraw > 0
-  const canEndTurn = isMyTurn && gameState.hasDrawnThisTurn && !hasPending
-  const canDraw = isMyTurn && (hasPending || !gameState.hasDrawnThisTurn || gameState.hasDrawnThisTurn)
+  // After drawing until you have a match, you must play — no more draws; end turn only if you still have nothing playable.
+  const canEndTurn = isMyTurn && gameState.hasDrawnThisTurn && !hasPending && !hasPlayableInHand
+  const canDraw = isMyTurn && (hasPending || !hasPlayableInHand)
   const drawLabel = hasPending ? `Draw ${gameState.pendingDraw}` : 'Draw'
 
   return (
@@ -314,9 +317,7 @@ export function UnoTable({ wsRef }: UnoTableProps) {
               className="glass border border-red-500/20 rounded-xl px-4 py-3 mb-4 text-center"
             >
               <p className="text-sm font-bold text-red-400">
-                {gameState.pendingDrawType === 'draw_two'
-                  ? `Stack a +2 or +4, or draw ${gameState.pendingDraw} cards!`
-                  : `Stack a +4 or draw ${gameState.pendingDraw} cards!`}
+                Stack a +2 or +4, or draw {gameState.pendingDraw} cards!
               </p>
             </motion.div>
           )}
