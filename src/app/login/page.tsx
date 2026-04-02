@@ -4,15 +4,16 @@ import { Suspense, useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
-import { createClient } from '@/lib/supabase/client'
+import { createClient, getRememberMe, setRememberMe } from '@/lib/supabase/client'
 import { AuthCard, AnimatedButton, PremiumInput, DeckLogo } from '@/components/ui'
 import { useUIStore } from '@/stores/ui-store'
+import { enableGuestMode, clearGuestMode } from '@/lib/guest'
 import { Mail, Lock, Wand2 } from 'lucide-react'
 
 function LoginContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const redirect = searchParams.get('redirect') || '/dashboard'
+  const redirect = searchParams.get('redirect') || '/'
   const urlError = searchParams.get('error')
   const { addToast } = useUIStore()
 
@@ -27,6 +28,7 @@ function LoginContent() {
   const [loading, setLoading] = useState(false)
   const [magicLinkSent, setMagicLinkSent] = useState(false)
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({})
+  const [rememberMe, setRememberMeState] = useState(() => getRememberMe())
 
   function validate() {
     const e: typeof errors = {}
@@ -43,19 +45,39 @@ function LoginContent() {
     if (!validate()) return
 
     setLoading(true)
-    const supabase = createClient()
+    try {
+      setRememberMe(rememberMe)
+      const supabase = createClient()
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+      const { error } = await Promise.race([
+        supabase.auth.signInWithPassword({ email, password }),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Request timed out — check your connection and try again.')), 15_000)
+        ),
+      ])
 
-    if (error) {
-      addToast({ type: 'error', title: 'Sign in failed', message: error.message })
+      if (error) {
+        let message = error.message
+        if (message.toLowerCase().includes('email not confirmed')) {
+          message = 'Your email is not confirmed yet. Check your inbox for the confirmation link.'
+        } else if (message.toLowerCase().includes('invalid login credentials')) {
+          message = 'Wrong email or password. Double-check and try again.'
+        }
+        addToast({ type: 'error', title: 'Sign in failed', message })
+        return
+      }
+
+      clearGuestMode()
+      await supabase.auth.getSession()
+
+      addToast({ type: 'success', title: 'Welcome back!' })
+      router.replace(redirect)
+      router.refresh()
+    } catch (err) {
+      addToast({ type: 'error', title: 'Sign in failed', message: err instanceof Error ? err.message : 'Something went wrong' })
+    } finally {
       setLoading(false)
-      return
     }
-
-    addToast({ type: 'success', title: 'Welcome back!' })
-    router.push(redirect)
-    router.refresh()
   }
 
   async function handleMagicLink() {
@@ -65,22 +87,30 @@ function LoginContent() {
     }
 
     setLoading(true)
-    const supabase = createClient()
+    try {
+      const supabase = createClient()
+      const { error } = await Promise.race([
+        supabase.auth.signInWithOtp({
+          email,
+          options: { emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(redirect)}` },
+        }),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Request timed out — check your connection and try again.')), 15_000)
+        ),
+      ])
 
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(redirect)}` },
-    })
+      if (error) {
+        addToast({ type: 'error', title: 'Failed to send magic link', message: error.message })
+        return
+      }
 
-    setLoading(false)
-
-    if (error) {
-      addToast({ type: 'error', title: 'Failed to send magic link', message: error.message })
-      return
+      setMagicLinkSent(true)
+      addToast({ type: 'success', title: 'Magic link sent!', message: 'Check your email' })
+    } catch (err) {
+      addToast({ type: 'error', title: 'Failed to send magic link', message: err instanceof Error ? err.message : 'Something went wrong' })
+    } finally {
+      setLoading(false)
     }
-
-    setMagicLinkSent(true)
-    addToast({ type: 'success', title: 'Magic link sent!', message: 'Check your email' })
   }
 
   return (
@@ -136,6 +166,17 @@ function LoginContent() {
             autoComplete="current-password"
           />
 
+          <label className="flex items-center gap-2 text-xs text-text-secondary select-none">
+            <input
+              type="checkbox"
+              checked={rememberMe}
+              onChange={(e) => setRememberMeState(e.target.checked)}
+              className="accent-accent"
+              disabled={loading}
+            />
+            Remember me
+          </label>
+
           <div className="pt-2 space-y-3">
             <AnimatedButton type="submit" loading={loading} className="w-full">
               Sign In
@@ -161,6 +202,15 @@ function LoginContent() {
           Sign up
         </Link>
       </p>
+
+      <div className="mt-4 pt-4 border-t border-white/[0.06]">
+        <button
+          onClick={() => { enableGuestMode(); router.push('/') }}
+          className="w-full text-center text-sm text-text-tertiary hover:text-text-secondary transition-colors py-2"
+        >
+          Skip for now — play as guest
+        </button>
+      </div>
     </AuthCard>
   )
 }

@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { useEffect } from 'react'
+import { createClient, SUPABASE_STORAGE_KEY } from '@/lib/supabase/client'
 import { useAuthStore } from '@/stores/auth-store'
+import { isGuestMode, getGuestProfile } from '@/lib/guest'
 import type { UserProfile } from '@/types'
 import type { AuthChangeEvent, Session, User } from '@supabase/supabase-js'
 
@@ -21,8 +22,7 @@ function fallbackProfile(user: User): UserProfile {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const { setUser, setLoading } = useAuthStore()
-  const initialised = useRef(false)
+  const { setUser, setGuest, setLoading } = useAuthStore()
 
   useEffect(() => {
     const supabase = createClient()
@@ -30,6 +30,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     async function syncUser(user: User | null) {
       if (!user) {
+        if (isGuestMode()) {
+          const guestProfile = getGuestProfile()
+          if (guestProfile) {
+            setGuest(guestProfile as UserProfile)
+            return
+          }
+        }
         setUser(null)
         return
       }
@@ -47,6 +54,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
+    // Fast initial hydration from local session to avoid a network round-trip.
+    void (async () => {
+      try {
+        const { data: sessionData } = await supabase.auth.getSession()
+        const user = sessionData.session?.user ?? null
+        await syncUser(user)
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        if (msg.includes('NavigatorLock') || msg.toLowerCase().includes('lock')) {
+          try { localStorage.removeItem(SUPABASE_STORAGE_KEY) } catch { /* ignore */ }
+          try { sessionStorage.removeItem(SUPABASE_STORAGE_KEY) } catch { /* ignore */ }
+          try { await supabase.auth.signOut({ scope: 'local' }) } catch { /* ignore */ }
+        }
+        setUser(null)
+      }
+    })()
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event: AuthChangeEvent, session: Session | null) => {
         if (event === 'SIGNED_OUT') {
@@ -54,14 +78,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return
         }
 
-        // INITIAL_SESSION, SIGNED_IN, TOKEN_REFRESHED, USER_UPDATED
-        await syncUser(session?.user ?? null)
-        initialised.current = true
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+          await syncUser(session?.user ?? null)
+        }
       }
     )
 
     return () => subscription.unsubscribe()
-  }, [setUser, setLoading])
+  }, [setUser, setGuest, setLoading])
 
   return <>{children}</>
 }

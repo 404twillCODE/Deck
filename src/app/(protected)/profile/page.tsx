@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { useAuthStore } from '@/stores/auth-store'
@@ -25,13 +25,65 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 
+interface GameStatRow {
+  game_type: string
+  games_played: number
+  games_won: number
+}
+
+const GAME_LABELS: Record<string, string> = {
+  blackjack: 'Blackjack',
+  poker: 'Poker',
+  uno: 'Uno',
+  'hot-potato': 'Hot Potato',
+}
+
 export default function ProfilePage() {
   const router = useRouter()
-  const { user, isLoading, setUser } = useAuthStore()
+  const { user, isGuest, isLoading, setUser } = useAuthStore()
   const { soundEnabled, toggleSound, reducedMotion, setReducedMotion, addToast } = useUIStore()
   const [editing, setEditing] = useState(false)
   const [displayName, setDisplayName] = useState(user?.display_name || '')
   const [saving, setSaving] = useState(false)
+  const [gameStats, setGameStats] = useState<GameStatRow[]>([])
+
+  useEffect(() => {
+    if (!user || isGuest) return
+    const supabase = createClient()
+    supabase
+      .from('game_stats')
+      .select('game_type, games_played, games_won')
+      .eq('user_id', user.id)
+      .order('games_won', { ascending: false })
+      .then(({ data }: { data: GameStatRow[] | null }) => { if (data) setGameStats(data) })
+  }, [user, isGuest])
+
+  if (isGuest) {
+    return (
+      <div className="min-h-dvh">
+        <header className="sticky top-0 z-40 glass border-b border-white/[0.04]">
+          <div className="max-w-2xl mx-auto px-4 h-16 flex items-center gap-4">
+            <Link href="/" className="p-2 rounded-lg hover:bg-white/[0.04] transition-colors text-text-secondary">
+              <ArrowLeft className="h-5 w-5" />
+            </Link>
+            <h1 className="text-lg font-semibold text-text-primary">Profile</h1>
+          </div>
+        </header>
+        <main className="max-w-2xl mx-auto px-4 py-8">
+          <GlassPanel className="p-8 text-center space-y-4">
+            <div className="w-20 h-20 rounded-full bg-white/10 flex items-center justify-center mx-auto">
+              <span className="text-2xl font-bold text-text-tertiary">G</span>
+            </div>
+            <h2 className="text-xl font-bold text-text-primary">Guest Mode</h2>
+            <p className="text-sm text-text-secondary max-w-sm mx-auto">
+              You&apos;re playing as a guest. Stats and progress aren&apos;t saved. Create an account to track your wins and appear on the leaderboard.
+            </p>
+            <AnimatedButton href="/signup" size="lg" className="mt-2">Create Account</AnimatedButton>
+          </GlassPanel>
+        </main>
+      </div>
+    )
+  }
 
   async function handleSave() {
     if (!displayName.trim()) return
@@ -82,7 +134,7 @@ export default function ProfilePage() {
     <div className="min-h-dvh">
       <header className="sticky top-0 z-40 glass border-b border-white/[0.04]">
         <div className="max-w-2xl mx-auto px-4 h-16 flex items-center gap-4">
-          <Link href="/dashboard" className="p-2 rounded-lg hover:bg-white/[0.04] transition-colors text-text-secondary">
+          <Link href="/" className="p-2 rounded-lg hover:bg-white/[0.04] transition-colors text-text-secondary">
             <ArrowLeft className="h-5 w-5" />
           </Link>
           <h1 className="text-lg font-semibold text-text-primary">Profile</h1>
@@ -154,6 +206,31 @@ export default function ProfilePage() {
               ))}
             </div>
           </motion.div>
+
+          {/* Per-Game Stats */}
+          {gameStats.length > 0 && (
+            <motion.div variants={item}>
+              <h3 className="text-sm font-medium text-text-secondary mb-3">Stats by Game</h3>
+              <div className="space-y-2">
+                {gameStats.map((gs) => {
+                  const winRate = gs.games_played > 0 ? ((gs.games_won / gs.games_played) * 100).toFixed(0) : '0'
+                  return (
+                    <GlassPanel key={gs.game_type} className="p-4 flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-text-primary">
+                          {GAME_LABELS[gs.game_type] || gs.game_type}
+                        </p>
+                        <p className="text-xs text-text-tertiary">
+                          {gs.games_won} win{gs.games_won !== 1 ? 's' : ''} · {gs.games_played} played
+                        </p>
+                      </div>
+                      <span className="text-lg font-bold text-accent-light">{winRate}%</span>
+                    </GlassPanel>
+                  )
+                })}
+              </div>
+            </motion.div>
+          )}
 
           {/* Settings */}
           <motion.div variants={item}>

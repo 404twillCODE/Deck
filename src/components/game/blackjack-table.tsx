@@ -236,7 +236,7 @@ export function BlackjackTable({ wsRef }: BlackjackTableProps) {
       <header className="sticky top-0 z-40 glass border-b border-white/[0.04]">
         <div className="max-w-7xl mx-auto px-4 md:px-8 h-14 md:h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Link href="/dashboard" className="p-2 rounded-lg hover:bg-white/[0.04] transition-colors text-text-secondary">
+            <Link href="/" className="p-2 rounded-lg hover:bg-white/[0.04] transition-colors text-text-secondary">
               <ArrowLeft className="h-4 w-4 md:h-5 md:w-5" />
             </Link>
             <RoomCodeBadge code={roomState?.roomCode || ''} />

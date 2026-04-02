@@ -3,6 +3,7 @@ import type { Env } from './types'
 export { BlackjackTableDO } from './durable-objects/blackjack-table'
 export { PokerTableDO } from './durable-objects/poker-table'
 export { UnoTableDO } from './durable-objects/uno-table'
+export { HotPotatoTableDO } from './durable-objects/hot-potato-table'
 
 const ALLOWED_ORIGINS = new Set([
   'https://deck-mu.vercel.app',
@@ -28,7 +29,9 @@ function isPrivateDevOrigin(origin: string): boolean {
 function pickCorsOrigin(origin: string | null, env: Env): string {
   if (!origin) return ''
   if (ALLOWED_ORIGINS.has(origin)) return origin
-  if (env.ENVIRONMENT === 'development' && isPrivateDevOrigin(origin)) return origin
+  // Allow private-network origins (localhost/LAN) for local dev/testing.
+  // This avoids brittle dependence on ENVIRONMENT being set correctly.
+  if (isPrivateDevOrigin(origin)) return origin
   return ''
 }
 
@@ -60,7 +63,7 @@ function withCors(request: Request, env: Env, response: Response): Response {
 
 // In-memory room registry (maps code → gameType). Survives within a single
 // isolate lifetime which is fine for dev; in production rooms are ephemeral anyway.
-const roomRegistry = new Map<string, 'blackjack' | 'poker' | 'uno'>()
+const roomRegistry = new Map<string, 'blackjack' | 'poker' | 'uno' | 'hot-potato'>()
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -75,7 +78,7 @@ export default {
     if (url.pathname === '/api/rooms' && request.method === 'POST') {
       let body: {
         code?: string
-        gameType?: 'blackjack' | 'poker' | 'uno'
+        gameType?: 'blackjack' | 'poker' | 'uno' | 'hot-potato'
         hostId?: string
         maxPlayers?: number
         startingChips?: number
@@ -95,9 +98,11 @@ export default {
       const hostId = body.hostId || 'pending'
 
       try {
-        const namespace = body.gameType === 'poker' ? env.POKER_TABLE : body.gameType === 'uno' ? env.UNO_TABLE : env.BLACKJACK_TABLE
+        const namespace = body.gameType === 'poker' ? env.POKER_TABLE : body.gameType === 'uno' ? env.UNO_TABLE : body.gameType === 'hot-potato' ? env.HOT_POTATO_TABLE : env.BLACKJACK_TABLE
         const id = namespace.idFromName(body.code)
         const stub = namespace.get(id)
+
+        const defaultMax = body.gameType === 'poker' ? 6 : body.gameType === 'hot-potato' ? 8 : 5
 
         const initResponse = await stub.fetch(new Request('https://internal/init', {
           method: 'POST',
@@ -107,8 +112,8 @@ export default {
             hostId,
             settings: {
               gameType: body.gameType,
-              maxPlayers: body.maxPlayers || (body.gameType === 'poker' ? 6 : 5),
-              startingChips: body.startingChips || 10000,
+              maxPlayers: body.maxPlayers || defaultMax,
+              startingChips: body.startingChips || (body.gameType === 'hot-potato' ? 0 : 10000),
               minimumBet: body.minimumBet || (body.gameType === 'poker' ? 100 : 50),
             },
           }),
@@ -144,8 +149,8 @@ export default {
       }
       // Room not in registry — could have been created in a different isolate.
       // Try both DOs by querying their /info endpoint.
-      for (const type of ['blackjack', 'poker', 'uno'] as const) {
-        const ns = type === 'poker' ? env.POKER_TABLE : type === 'uno' ? env.UNO_TABLE : env.BLACKJACK_TABLE
+      for (const type of ['blackjack', 'poker', 'uno', 'hot-potato'] as const) {
+        const ns = type === 'poker' ? env.POKER_TABLE : type === 'uno' ? env.UNO_TABLE : type === 'hot-potato' ? env.HOT_POTATO_TABLE : env.BLACKJACK_TABLE
         const id = ns.idFromName(code)
         const stub = ns.get(id)
         try {
@@ -179,9 +184,9 @@ export default {
 
       const roomCode = wsMatch[1].toUpperCase()
       const gameType = url.searchParams.get('game') || roomRegistry.get(roomCode) || 'blackjack'
-      roomRegistry.set(roomCode, gameType as 'blackjack' | 'poker' | 'uno')
+      roomRegistry.set(roomCode, gameType as 'blackjack' | 'poker' | 'uno' | 'hot-potato')
 
-      const namespace = gameType === 'poker' ? env.POKER_TABLE : gameType === 'uno' ? env.UNO_TABLE : env.BLACKJACK_TABLE
+      const namespace = gameType === 'poker' ? env.POKER_TABLE : gameType === 'uno' ? env.UNO_TABLE : gameType === 'hot-potato' ? env.HOT_POTATO_TABLE : env.BLACKJACK_TABLE
       const id = namespace.idFromName(roomCode)
       const stub = namespace.get(id)
 

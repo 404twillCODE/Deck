@@ -17,19 +17,53 @@ import {
 import { BlackjackTable } from '@/components/game/blackjack-table'
 import { PokerTable } from '@/components/game/poker-table'
 import { UnoTable } from '@/components/game/uno-table'
+import { HotPotatoTable } from '@/components/game/hot-potato-table'
 import { ArrowLeft, Copy, Users, Play, Loader2, RefreshCw } from 'lucide-react'
 import Link from 'next/link'
+import { recordGameResult } from '@/lib/stats'
 import type { ServerMessage, RoomState } from '@/types'
+
+function useStatsRecorder() {
+  const roomState = useGameStore((s) => s.roomState)
+  const { user, isGuest } = useAuthStore()
+  const recordedRef = useRef<string>('')
+
+  useEffect(() => {
+    if (!roomState?.gameState || !user || isGuest) return
+
+    const gs = roomState.gameState
+    const gameType = roomState.gameType
+    let isComplete = false
+    let winnerId: string | null = null
+
+    if ('phase' in gs && gs.phase === 'complete') {
+      isComplete = true
+      if ('winnerId' in gs) winnerId = gs.winnerId as string | null
+    }
+
+    if (!isComplete) return
+
+    const roundKey = `${gameType}-${('roundNumber' in gs ? gs.roundNumber : 0)}`
+    if (recordedRef.current === roundKey) return
+    recordedRef.current = roundKey
+
+    const won = winnerId === user.id
+    recordGameResult(user.id, gameType, won).catch(() => {})
+  }, [roomState?.gameState, roomState?.gameType, user, isGuest])
+}
 
 function RoomContent() {
   const params = useParams()
   const router = useRouter()
   const searchParams = useSearchParams()
   const code = (params.code as string).toUpperCase()
-  const gameTypeParam = searchParams.get('game') || 'blackjack'
+  const gameTypeQuery = searchParams.get('game')
+  const [resolvedGameType, setResolvedGameType] = useState<string | null>(gameTypeQuery)
+  const gameTypeParam = resolvedGameType || 'blackjack'
 
   const { user } = useAuthStore()
   const addToast = useUIStore((s) => s.addToast)
+  useStatsRecorder()
 
   const roomState = useGameStore((s) => s.roomState)
   const isConnected = useGameStore((s) => s.isConnected)
@@ -45,6 +79,38 @@ function RoomContent() {
   const [connStatus, setConnStatus] = useState<'connecting' | 'connected' | 'reconnecting' | 'failed'>('connecting')
   const wsRef = useRef<GameWebSocket | null>(null)
   const mountedRef = useRef(true)
+
+  // If someone opens a room link without ?game=..., resolve it via the worker
+  // before attempting the websocket connection. This is critical when joining
+  // a poker/uno/etc room from a login redirect or shared link.
+  useEffect(() => {
+    const cur = searchParams.get('game')
+    if (cur) {
+      setResolvedGameType(cur)
+      return
+    }
+
+    let cancelled = false
+    ;(async () => {
+      try {
+        let workerUrl = process.env.NEXT_PUBLIC_WORKER_URL || 'http://localhost:8787'
+        if (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+          workerUrl = workerUrl.replace('localhost', window.location.hostname).replace('127.0.0.1', window.location.hostname)
+        }
+        const res = await fetch(`${workerUrl}/api/rooms/${code}`)
+        const data = res.ok ? await res.json() as { gameType?: string } : null
+        const gt = data?.gameType || 'blackjack'
+        if (cancelled) return
+        setResolvedGameType(gt)
+        router.replace(`/room/${code}?game=${encodeURIComponent(gt)}`)
+      } catch {
+        if (cancelled) return
+        setResolvedGameType('blackjack')
+      }
+    })()
+
+    return () => { cancelled = true }
+  }, [code, router, searchParams])
 
   const doConnect = useCallback(async (ws: GameWebSocket) => {
     try {
@@ -75,6 +141,7 @@ function RoomContent() {
   }, [code, gameTypeParam, user?.display_name, user?.username, setConnectionError])
 
   useEffect(() => {
+    if (!resolvedGameType) return
     mountedRef.current = true
     const ws = new GameWebSocket()
     wsRef.current = ws
@@ -111,6 +178,7 @@ function RoomContent() {
           updateGameState(message.payload)
           break
         case 'uno_state':
+        case 'hp_state':
           updateGameState(message.payload)
           break
         case 'chips_reset':
@@ -118,7 +186,7 @@ function RoomContent() {
           break
         case 'error':
           if (message.payload.code === 'ROOM_NOT_FOUND') {
-            router.push('/dashboard')
+            router.push('/')
           }
           break
         case 'pong':
@@ -155,7 +223,7 @@ function RoomContent() {
       resetStore()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [code, gameTypeParam])
+  }, [code, gameTypeParam, resolvedGameType])
 
   const isHost = roomState?.hostId === user?.id
   const allReady = roomState?.players?.every((p) => p.isReady) && (roomState?.players?.length ?? 0) >= 2
@@ -194,12 +262,12 @@ function RoomContent() {
         }
         case 'bj_state': case 'bj_round_result': updateGameState(message.payload); break
         case 'pk_state': case 'pk_showdown': updateGameState(message.payload); break
-        case 'uno_state': updateGameState(message.payload); break
+        case 'uno_state': case 'hp_state': updateGameState(message.payload); break
         case 'chips_reset':
           addToast({ type: 'info', title: 'Chips Reset', message: `Everyone reset to ${message.payload.startingChips.toLocaleString()} chips.` })
           break
         case 'error':
-          if (message.payload.code === 'ROOM_NOT_FOUND') router.push('/dashboard')
+          if (message.payload.code === 'ROOM_NOT_FOUND') router.push('/')
           break
       }
     })
@@ -235,9 +303,7 @@ function RoomContent() {
                   <RefreshCw className="h-4 w-4" />
                   Retry
                 </AnimatedButton>
-                <Link href="/dashboard">
-                  <AnimatedButton variant="ghost">Back to Lobby</AnimatedButton>
-                </Link>
+                <AnimatedButton href="/" variant="ghost">Back Home</AnimatedButton>
               </div>
             </>
           ) : (
@@ -255,6 +321,7 @@ function RoomContent() {
     if (roomState.gameType === 'blackjack') return <BlackjackTable wsRef={wsRef} />
     if (roomState.gameType === 'poker') return <PokerTable wsRef={wsRef} />
     if (roomState.gameType === 'uno') return <UnoTable wsRef={wsRef} />
+    if (roomState.gameType === 'hot-potato') return <HotPotatoTable wsRef={wsRef} />
   }
 
   return (
@@ -272,7 +339,7 @@ function RoomContent() {
       <header className="sticky top-0 z-40 glass border-b border-white/[0.04]">
         <div className="max-w-3xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Link href="/dashboard" className="p-2 rounded-lg hover:bg-white/[0.04] transition-colors text-text-secondary">
+            <Link href="/" className="p-2 rounded-lg hover:bg-white/[0.04] transition-colors text-text-secondary">
               <ArrowLeft className="h-5 w-5" />
             </Link>
             <RoomCodeBadge code={code} />
@@ -293,7 +360,9 @@ function RoomContent() {
                 ? 'Poker Table'
                 : (roomState?.gameType || gameTypeParam) === 'uno'
                   ? 'Uno Table'
-                  : 'Blackjack Table'}
+                  : (roomState?.gameType || gameTypeParam) === 'hot-potato'
+                    ? 'Hot Potato'
+                    : 'Blackjack Table'}
             </h1>
             <p className="text-text-secondary">
               Waiting for players... Share the room code to invite friends.

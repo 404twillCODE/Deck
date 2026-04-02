@@ -49,7 +49,7 @@ echo.
 :: ─── Start worker in its own window ───────────────
 echo [3/4] Starting Cloudflare Worker on port 8787...
 cd /d "%ROOT%worker"
-start "Deck - Worker" cmd /k "title Deck Worker (port 8787) && color 0B && npx wrangler dev --ip 0.0.0.0 --port 8787"
+start "Deck - Worker" cmd /k "title Deck Worker (port 8787) && color 0B && set ENVIRONMENT=development && npx wrangler dev --config wrangler.toml --ip 0.0.0.0 --port 8787"
 
 timeout /t 4 /nobreak >nul
 echo    Worker started.

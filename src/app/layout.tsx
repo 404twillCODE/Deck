@@ -3,6 +3,7 @@ import { Inter } from 'next/font/google'
 import './globals.css'
 import { FloatingBackground } from '@/components/ui/floating-background'
 import { ToastContainer } from '@/components/ui/toast-system'
+import { AuthProvider } from '@/components/providers/auth-provider'
 
 const inter = Inter({
   subsets: ['latin'],
@@ -36,7 +37,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className={`${inter.variable} dark`} suppressHydrationWarning>
       <body className="font-sans antialiased">
         <FloatingBackground />
-        {children}
+        <AuthProvider>
+          {children}
+        </AuthProvider>
         <ToastContainer />
       </body>
     </html>

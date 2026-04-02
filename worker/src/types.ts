@@ -1,6 +1,6 @@
 export type Suit = 'hearts' | 'diamonds' | 'clubs' | 'spades'
 export type Rank = '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | 'J' | 'Q' | 'K' | 'A'
-export type GameType = 'blackjack' | 'poker' | 'uno'
+export type GameType = 'blackjack' | 'poker' | 'uno' | 'hot-potato'
 
 export type UnoColor = 'red' | 'yellow' | 'green' | 'blue'
 
@@ -112,6 +112,23 @@ export interface PokerState {
   lastAction?: { playerId: string; action: string; amount?: number }
 }
 
+export interface HotPotatoPlayer extends Player {
+  isAlive: boolean
+  eliminatedRound: number | null
+}
+
+export interface HotPotatoState {
+  phase: 'waiting' | 'countdown' | 'passing' | 'exploded' | 'complete'
+  players: HotPotatoPlayer[]
+  holderIndex: number
+  roundNumber: number
+  eliminationOrder: string[]
+  winnerId: string | null
+  passCount: number
+  roundStartedAt: number
+  lastEliminatedId: string | null
+}
+
 export interface RoomState {
   roomId: string
   roomCode: string
@@ -121,7 +138,7 @@ export interface RoomState {
   maxPlayers: number
   isStarted: boolean
   settings: TableSettings
-  gameState?: BlackjackState | PokerState | UnoState
+  gameState?: BlackjackState | PokerState | UnoState | HotPotatoState
 }
 
 export type ClientMessage =
@@ -144,6 +161,7 @@ export type ClientMessage =
   | { type: 'uno_call_uno' }
   | { type: 'uno_challenge_uno'; payload: { targetPlayerId: string } }
   | { type: 'uno_pass' }
+  | { type: 'hp_pass' }
   | { type: 'ping' }
 
 export type ServerMessage =
@@ -159,6 +177,7 @@ export type ServerMessage =
   | { type: 'pk_showdown'; payload: PokerState }
   | { type: 'pk_winner'; payload: { playerId: string; amount: number; handRank: string; isSplit?: boolean; winnerIds?: string[] } }
   | { type: 'uno_state'; payload: UnoState }
+  | { type: 'hp_state'; payload: HotPotatoState }
   | { type: 'chips_reset'; payload: { startingChips: number } }
   | { type: 'chat'; payload: { playerId: string; username: string; message: string; timestamp: number } }
   | { type: 'error'; payload: { message: string; code?: string } }
@@ -168,5 +187,6 @@ export interface Env {
   BLACKJACK_TABLE: DurableObjectNamespace
   POKER_TABLE: DurableObjectNamespace
   UNO_TABLE: DurableObjectNamespace
+  HOT_POTATO_TABLE: DurableObjectNamespace
   ENVIRONMENT: string
 }

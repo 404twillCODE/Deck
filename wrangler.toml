@@ -1,5 +1,5 @@
-name = "deck-worker"
-main = "src/index.ts"
+name = "deck"
+main = "worker/src/index.ts"
 compatibility_date = "2025-03-15"
 
 [durable_objects]
@@ -23,10 +23,5 @@ tag = "v3"
 new_sqlite_classes = ["HotPotatoTableDO"]
 
 [vars]
-ENVIRONMENT = "development"
+ENVIRONMENT = "production"
 
-# Uncomment for D1 database
-# [[d1_databases]]
-# binding = "DB"
-# database_name = "deck-db"
-# database_id = "your-database-id"

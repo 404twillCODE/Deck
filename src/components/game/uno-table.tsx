@@ -246,7 +246,7 @@ export function UnoTable({ wsRef }: UnoTableProps) {
       <header className="sticky top-0 z-40 glass border-b border-white/[0.04]">
         <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Link href="/dashboard" className="p-2 rounded-lg hover:bg-white/[0.04] transition-colors text-text-secondary">
+            <Link href="/" className="p-2 rounded-lg hover:bg-white/[0.04] transition-colors text-text-secondary">
               <ArrowLeft className="h-5 w-5" />
             </Link>
             <span className="text-sm font-semibold text-text-primary">UNO</span>

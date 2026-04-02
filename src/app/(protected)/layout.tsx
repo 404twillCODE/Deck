@@ -1,7 +1,7 @@
 'use client'
 
-import { AuthProvider } from '@/components/providers/auth-provider'
+import { ProtectedGate } from '@/components/providers/protected-gate'
 
 export default function ProtectedLayout({ children }: { children: React.ReactNode }) {
-  return <AuthProvider>{children}</AuthProvider>
+  return <ProtectedGate>{children}</ProtectedGate>
 }
