@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useGameStore } from '@/stores/game-store'
 import { useAuthStore } from '@/stores/auth-store'
-import { AnimatedButton, DeckShuffle } from '@/components/ui'
+import { DeckShuffle } from '@/components/ui'
 import { ArrowLeft, RotateCcw, RotateCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import Link from 'next/link'
@@ -352,8 +352,6 @@ export function UnoTable({ wsRef }: UnoTableProps) {
     [gameState, isMyTurn],
   )
 
-  const hasPlayableInHand = myCards.some((c) => canPlayCard(c))
-
   function handlePlayCard(card: UnoCard) {
     if (!canPlayCard(card)) return
     if (card.type === 'wild' || card.type === 'wild_draw_four') {
@@ -378,13 +376,8 @@ export function UnoTable({ wsRef }: UnoTableProps) {
 
   const hasPending = gameState.pendingDraw > 0
   const cannotDrawMoreFromPile = gameState.cannotDrawMoreFromPile === true
-  const canPassStack = gameState.canPassAfterNumberStack === true
-  const canEndTurn =
-    isMyTurn &&
-    !hasPending &&
-    ((gameState.hasDrawnThisTurn && !hasPlayableInHand) ||
-      (canPassStack && hasPlayableInHand))
   const canDraw = isMyTurn && (hasPending || !cannotDrawMoreFromPile)
+  const winsToWin = Math.max(1, roomState?.settings?.winsToWin ?? 1)
   const drawLabel = hasPending ? `Draw ${gameState.pendingDraw}` : 'Draw'
 
   return (
@@ -398,9 +391,19 @@ export function UnoTable({ wsRef }: UnoTableProps) {
               <ArrowLeft className="h-5 w-5" />
             </Link>
             <span className="text-sm font-semibold text-text-primary">UNO</span>
-            <span className="text-xs text-text-tertiary">
+            <span className="text-xs text-text-tertiary leading-snug">
               Round {gameState.roundNumber}
-              <span className="text-text-tertiary/70"> · First to {roomState?.settings?.winsToWin ?? 1} wins</span>
+              <span className="text-text-tertiary/80">
+                {' '}
+                · Wins:{' '}
+                {gameState.players.map((p, i) => (
+                  <span key={p.id}>
+                    {i > 0 ? ' · ' : ''}
+                    {p.id === user?.id ? 'You' : p.displayName}: {p.wins}
+                  </span>
+                ))}
+                <span className="text-text-tertiary/60"> · First to {winsToWin} wins the match</span>
+              </span>
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -477,9 +480,10 @@ export function UnoTable({ wsRef }: UnoTableProps) {
           )}
         </AnimatePresence>
 
-        {/* Arena + hand grouped and vertically centered — hand sits under piles, higher than viewport bottom */}
-        <div className="flex-1 flex flex-col min-h-0 justify-center items-center py-2 gap-8">
-          <div className="flex flex-col items-center gap-4 w-full shrink-0">
+        {/* Arena sits above the hand; hand stays anchored to the bottom of the viewport */}
+        <div className="flex-1 flex flex-col min-h-0 py-2 gap-4">
+          <div className="flex-1 min-h-0 flex flex-col justify-end items-center">
+          <div className="flex flex-col items-center gap-4 w-full shrink-0 pb-2">
           <div className="flex items-end justify-center gap-8 sm:gap-12">
             <div className="flex flex-col items-center gap-2">
               <motion.button
@@ -545,11 +549,6 @@ export function UnoTable({ wsRef }: UnoTableProps) {
                   UNO!
                 </button>
               )}
-              {canEndTurn && (
-                <AnimatedButton size="sm" variant="secondary" onClick={() => wsRef.current?.send({ type: 'uno_pass' })}>
-                  {canPassStack && hasPlayableInHand ? 'Done stacking' : 'End turn'}
-                </AnimatedButton>
-              )}
             </motion.div>
           )}
           </div>
@@ -583,9 +582,10 @@ export function UnoTable({ wsRef }: UnoTableProps) {
               </motion.div>
             )}
           </AnimatePresence>
+          </div>
 
-          {/* Hand — full gaps, no overlap; scroll horizontally when needed */}
-          <div className="shrink-0 flex flex-col w-full max-w-full pb-2">
+          {/* Hand — anchored to bottom; scroll horizontally when needed */}
+          <div className="mt-auto shrink-0 flex flex-col w-full max-w-full pt-2 border-t border-white/[0.06] pb-2">
             <div className="flex items-baseline justify-between gap-3 mb-2 px-1 shrink-0">
               <p className="text-sm font-medium text-text-secondary">
                 Your hand · {myCards.length} {myCards.length === 1 ? 'card' : 'cards'}

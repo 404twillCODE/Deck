@@ -40,7 +40,7 @@ export interface UnoState {
   hasDrawnThisTurn: boolean
   /** True when you drew a playable card from the pile this turn; optional draws from the pile are blocked. */
   cannotDrawMoreFromPile: boolean
-  /** After stacking same-number cards, use End turn to stop even if you could play more. */
+  /** True while chaining same-number plays; only matching numbers and wilds are legal until you play out or the chain auto-ends. */
   canPassAfterNumberStack: boolean
   /** Rank you are chaining (from the last stacked card you played); only matching numbers + wilds are legal until you end the turn. */
   numberStackRank: number | null

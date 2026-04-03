@@ -255,6 +255,11 @@ export class UnoTableDO extends DurableObject<Env> {
     }
   }
 
+  /** True if another card can be taken from the pile (including after reshuffling the discard). */
+  private canDrawMoreFromPile(): boolean {
+    return this.drawPile.length > 0 || this.discardPile.length > 1
+  }
+
   private drawCardFromPile(): UnoCard | null {
     if (this.drawPile.length === 0) {
       if (this.discardPile.length <= 1) return null
@@ -525,15 +530,14 @@ export class UnoTableDO extends DurableObject<Env> {
 
     const hand = this.playerHands.get(playerId)
 
-    if (this.mayPassAfterNumberStack) {
-      this.lastAction = { playerId, action: 'end_turn' }
-      this.advanceToNext()
-      this.broadcastPersonalized()
-      return
-    }
+    // Same-number stack: no voluntary pass — play matching numbers or a wild until the chain ends.
+    if (this.mayPassAfterNumberStack) return
 
     if (!this.hasDrawnThisTurn) return
     if (hand && this.handHasPlayable(hand)) return
+
+    // Optional draws: must keep drawing while a draw is possible and nothing in hand is playable.
+    if (hand && !this.handHasPlayable(hand) && this.canDrawMoreFromPile()) return
 
     this.lastAction = { playerId, action: 'end_turn' }
     this.advanceToNext()
