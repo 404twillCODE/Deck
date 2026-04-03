@@ -18,8 +18,11 @@ export class PokerTableDO extends DurableObject<Env> {
     maxPlayers: 9,
     startingChips: 10000,
     minimumBet: 100,
+    freePlay: false,
   }
   private players: PokerPlayer[] = []
+  // Stores each player's account chip balance so we can restore it when Free Play is toggled off.
+  private accountChipsByPlayerId: Map<string, number> = new Map()
   private gameState: PokerState = this.defaultState()
   private deck: Deck = new Deck()
   private isStarted = false
@@ -68,6 +71,7 @@ export class PokerTableDO extends DurableObject<Env> {
         active: this.roomCode !== '' || this.players.length > 0,
         gameType: 'poker',
         players: this.players.length,
+        freePlay: this.settings.freePlay,
       }))
     }
 
@@ -84,6 +88,22 @@ export class PokerTableDO extends DurableObject<Env> {
         this.gameState.minimumRaise = this.settings.minimumBet
       }
       return new Response(JSON.stringify({ success: true }))
+    }
+
+    if (url.pathname === '/freeplay' && request.method === 'POST') {
+      if (this.isStarted) return new Response(JSON.stringify({ error: 'Game already started' }), { status: 409 })
+      const body = await request.json() as { freePlay?: boolean }
+      this.settings.freePlay = body.freePlay === true
+
+      for (const p of this.players) {
+        p.chips = this.settings.freePlay
+          ? this.settings.startingChips
+          : (this.accountChipsByPlayerId.get(p.id) ?? this.settings.startingChips)
+      }
+
+      // Update everyone with the new chips/state.
+      this.broadcast({ type: 'room_state', payload: this.getRoomState() })
+      return new Response(JSON.stringify({ success: true, freePlay: this.settings.freePlay }), { headers: { 'Content-Type': 'application/json' } })
     }
 
     return new Response('Not found', { status: 404 })
@@ -157,9 +177,10 @@ export class PokerTableDO extends DurableObject<Env> {
     }
   }
 
-  private handleJoin(ws: WebSocket, payload: { roomCode: string; token: string; displayName?: string }) {
+  private handleJoin(ws: WebSocket, payload: { roomCode: string; token: string; displayName?: string; accountChips?: number }) {
     const playerId = this.extractUserId(payload.token) || `guest-${Date.now()}`
     const displayName = payload.displayName || `Player ${this.players.length + 1}`
+    const accountChips = typeof payload.accountChips === 'number' ? payload.accountChips : this.settings.startingChips
 
     if (!this.roomCode && payload.roomCode) {
       this.roomCode = payload.roomCode
@@ -183,7 +204,7 @@ export class PokerTableDO extends DurableObject<Env> {
         id: playerId,
         username: displayName,
         displayName,
-        chips: this.settings.startingChips,
+        chips: this.settings.freePlay ? this.settings.startingChips : accountChips,
         isHost: playerId === this.hostId || this.players.length === 0,
         isReady: false,
         isConnected: true,
@@ -201,9 +222,12 @@ export class PokerTableDO extends DurableObject<Env> {
       if (this.players.length === 1) this.hostId = playerId
       this.broadcast({ type: 'player_joined', payload: { player: pkPlayer } })
     } else {
+      player.chips = this.settings.freePlay ? this.settings.startingChips : accountChips
       player.isConnected = true
       this.broadcast({ type: 'player_joined', payload: { player } })
     }
+
+    this.accountChipsByPlayerId.set(playerId, accountChips)
 
     const state = this.getRoomState()
     if (state.gameState) {

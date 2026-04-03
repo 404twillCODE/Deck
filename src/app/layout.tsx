@@ -13,13 +13,13 @@ const inter = Inter({
 })
 
 export const metadata: Metadata = {
-  title: 'Deck — Play Cards With Friends',
+  title: 'FunDeck — Play Cards With Friends',
   description: 'Premium multiplayer card games. Poker, Blackjack, and more — beautifully crafted.',
   metadataBase: new URL('https://playdeck.app'),
   openGraph: {
-    title: 'Deck — Play Cards With Friends',
+    title: 'FunDeck — Play Cards With Friends',
     description: 'Premium multiplayer card games with friends.',
-    siteName: 'Deck',
+    siteName: 'FunDeck',
     type: 'website',
   },
   icons: { icon: '/favicon.ico' },

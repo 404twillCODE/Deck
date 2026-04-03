@@ -1,9 +1,9 @@
 @echo off
-title Deck - Launcher
+title FunDeck - Launcher
 color 0A
 
 echo ============================================
-echo           DECK - Game Server Launcher
+echo           FUNDECK - Game Server Launcher
 echo ============================================
 echo.
 
@@ -49,7 +49,7 @@ echo.
 :: ─── Start worker in its own window ───────────────
 echo [3/4] Starting Cloudflare Worker on port 8787...
 cd /d "%ROOT%worker"
-start "Deck - Worker" cmd /k "title Deck Worker (port 8787) && color 0B && set ENVIRONMENT=development && npx wrangler dev --config wrangler.toml --ip 0.0.0.0 --port 8787"
+start "FunDeck - Worker" cmd /k "title FunDeck Worker (port 8787) && color 0B && set ENVIRONMENT=development && npx wrangler dev --config wrangler.toml --ip 0.0.0.0 --port 8787"
 
 timeout /t 4 /nobreak >nul
 echo    Worker started.
@@ -58,7 +58,7 @@ echo.
 :: ─── Start frontend in its own window ─────────────
 echo [4/4] Starting Next.js frontend on port 3000...
 cd /d "%ROOT%"
-start "Deck - Frontend" cmd /k "title Deck Frontend (port 3000) && color 0E && npx next dev --port 3000"
+start "FunDeck - Frontend" cmd /k "title FunDeck Frontend (port 3000) && color 0E && npx next dev --port 3000"
 
 timeout /t 5 /nobreak >nul
 
@@ -67,7 +67,7 @@ start http://localhost:3000
 
 echo.
 echo ============================================
-echo    Deck is running!
+echo    FunDeck is running!
 echo.
 echo    Frontend : http://localhost:3000
 echo    Worker   : http://localhost:8787

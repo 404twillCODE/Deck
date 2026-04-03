@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
 import { createClient } from '@/lib/supabase/client'
-import { AuthCard, AnimatedButton, PremiumInput, DeckLogo } from '@/components/ui'
+import { AuthCard, AnimatedButton, PremiumInput, FunDeckLogo } from '@/components/ui'
 import { useUIStore } from '@/stores/ui-store'
 import { Mail, Lock, Wand2 } from 'lucide-react'
 
@@ -18,7 +18,14 @@ function LoginContent() {
 
   useEffect(() => {
     if (urlError) {
-      addToast({ type: 'error', title: 'Authentication failed', message: 'Please sign in again.' })
+      const message =
+        urlError === 'account_disabled'
+          ? 'Your account has been disabled. Please contact support if you think this was a mistake.'
+          : urlError === 'account_banned'
+            ? 'Your account has been banned. Please contact support if you think this was a mistake.'
+            : 'Please sign in again.'
+
+      addToast({ type: 'error', title: 'Access denied', message })
     }
   }, [urlError, addToast])
 
@@ -95,7 +102,7 @@ function LoginContent() {
     <AuthCard>
       <div className="text-center mb-8">
         <Link href="/" className="inline-flex items-center gap-2 mb-6">
-          <DeckLogo size="lg" />
+          <FunDeckLogo size="lg" />
         </Link>
         <h1 className="text-2xl font-bold text-text-primary mb-2">Welcome back</h1>
         <p className="text-sm text-text-secondary">Sign in to join your table</p>

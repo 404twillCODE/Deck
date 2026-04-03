@@ -47,6 +47,7 @@ export default function ProfilePage() {
   const [displayName, setDisplayName] = useState(user?.display_name || '')
   const [saving, setSaving] = useState(false)
   const [gameStats, setGameStats] = useState<GameStatRow[]>([])
+  const [resetChipsLoading, setResetChipsLoading] = useState(false)
   const totalGamesPlayed = gameStats.reduce((sum, stat) => sum + stat.games_played, 0)
   const totalGamesWon = gameStats.reduce((sum, stat) => sum + stat.games_won, 0)
 
@@ -110,11 +111,34 @@ export default function ProfilePage() {
 
   async function handleLogout() {
     const supabase = createClient()
-    await supabase.auth.signOut()
+    // Clear client-side auth state immediately so UI & route guards update fast.
     useAuthStore.getState().reset()
-    addToast({ type: 'info', title: 'Signed out' })
-    router.push('/')
-    router.refresh()
+    try {
+      await supabase.auth.signOut()
+    } catch (e) {
+      console.warn('[logout] signOut threw', e)
+    } finally {
+      addToast({ type: 'info', title: 'Signed out' })
+      // Always redirect home, even if sign-out fails (prevents “stuck on profile” UX).
+      router.push('/')
+      router.refresh()
+    }
+  }
+
+  async function handleResetChips() {
+    if (!user) return
+    const amount = 10000
+    setResetChipsLoading(true)
+    const supabase = createClient()
+    const { error } = await supabase.from('profiles').update({ chips_balance: amount }).eq('id', user.id)
+
+    if (error) {
+      addToast({ type: 'error', title: 'Failed to reset chips', message: error.message })
+    } else {
+      setUser({ ...user, chips_balance: amount })
+      addToast({ type: 'success', title: 'Chips reset', message: `Your balance is now ${amount.toLocaleString()} chips.` })
+    }
+    setResetChipsLoading(false)
   }
 
   const stats = [
@@ -272,6 +296,36 @@ export default function ProfilePage() {
                   />
                 </div>
               </button>
+
+              <div className="p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-3">
+                    <Coins className="h-4 w-4 text-text-tertiary" />
+                    <span className="text-sm text-text-primary">Reset Chips</span>
+                  </div>
+                  <span className="text-xs text-text-tertiary">
+                    Updates your account bankroll
+                  </span>
+                </div>
+
+                <div className="glass rounded-xl p-4 border border-white/[0.06]">
+                  <p className="text-sm text-text-primary font-medium">Resets your chips to 10,000</p>
+                  <p className="text-xs text-text-secondary mt-1">
+                    You can&apos;t set chip balance to another value.
+                  </p>
+                </div>
+
+                <div className="flex gap-3 mt-3">
+                  <AnimatedButton
+                    className="w-full"
+                    loading={resetChipsLoading}
+                    disabled={resetChipsLoading}
+                    onClick={handleResetChips}
+                  >
+                    Reset Chips
+                  </AnimatedButton>
+                </div>
+              </div>
             </GlassPanel>
           </motion.div>
 

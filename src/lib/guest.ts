@@ -1,36 +1,71 @@
-const COOKIE_KEY = 'deck_guest'
-const LS_ID_KEY = 'deck_guest_id'
-const LS_NAME_KEY = 'deck_guest_name'
+const BRAND_COOKIE_KEY = 'fundek_guest'
+const BRAND_LS_ID_KEY = 'fundek_guest_id'
+const BRAND_LS_NAME_KEY = 'fundek_guest_name'
+
+const LEGACY_COOKIE_KEY = 'deck_guest'
+const LEGACY_LS_ID_KEY = 'deck_guest_id'
+const LEGACY_LS_NAME_KEY = 'deck_guest_name'
+
+function readLocalStorageWithLegacyPreference<T>(primaryKey: string, legacyKey: string): T | null {
+  if (typeof window === 'undefined') return null
+  const primary = localStorage.getItem(primaryKey)
+  if (primary !== null) return primary as unknown as T
+  const legacy = localStorage.getItem(legacyKey)
+  return legacy as unknown as T | null
+}
 
 export function enableGuestMode(name?: string) {
   const displayName = name?.trim() || `Guest #${Math.floor(Math.random() * 9000 + 1000)}`
-  let guestId = typeof window !== 'undefined' ? localStorage.getItem(LS_ID_KEY) : null
+
+  let guestId = readLocalStorageWithLegacyPreference<string>(BRAND_LS_ID_KEY, LEGACY_LS_ID_KEY)
   if (!guestId) {
     guestId = `guest-${crypto.randomUUID()}`
   }
 
-  document.cookie = `${COOKIE_KEY}=1; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`
-  localStorage.setItem(LS_ID_KEY, guestId)
-  localStorage.setItem(LS_NAME_KEY, displayName)
+  document.cookie = `${BRAND_COOKIE_KEY}=1; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`
+  document.cookie = `${LEGACY_COOKIE_KEY}=; path=/; max-age=0`
+
+  localStorage.setItem(BRAND_LS_ID_KEY, guestId)
+  localStorage.setItem(BRAND_LS_NAME_KEY, displayName)
+  localStorage.removeItem(LEGACY_LS_ID_KEY)
+  localStorage.removeItem(LEGACY_LS_NAME_KEY)
   return { id: guestId, displayName }
 }
 
 export function clearGuestMode() {
-  document.cookie = `${COOKIE_KEY}=; path=/; max-age=0`
-  localStorage.removeItem(LS_ID_KEY)
-  localStorage.removeItem(LS_NAME_KEY)
+  document.cookie = `${BRAND_COOKIE_KEY}=; path=/; max-age=0`
+  document.cookie = `${LEGACY_COOKIE_KEY}=; path=/; max-age=0`
+  localStorage.removeItem(BRAND_LS_ID_KEY)
+  localStorage.removeItem(BRAND_LS_NAME_KEY)
+  localStorage.removeItem(LEGACY_LS_ID_KEY)
+  localStorage.removeItem(LEGACY_LS_NAME_KEY)
 }
 
 export function isGuestMode(): boolean {
   if (typeof window === 'undefined') return false
-  return localStorage.getItem(LS_ID_KEY) !== null
+  return (
+    localStorage.getItem(BRAND_LS_ID_KEY) !== null ||
+    localStorage.getItem(LEGACY_LS_ID_KEY) !== null
+  )
 }
 
 export function getGuestProfile() {
   if (typeof window === 'undefined') return null
-  const id = localStorage.getItem(LS_ID_KEY)
-  const name = localStorage.getItem(LS_NAME_KEY)
+  const id = readLocalStorageWithLegacyPreference<string>(BRAND_LS_ID_KEY, LEGACY_LS_ID_KEY)
+  const name = readLocalStorageWithLegacyPreference<string>(BRAND_LS_NAME_KEY, LEGACY_LS_NAME_KEY)
   if (!id) return null
+
+  // Seamless migration: if the user only has legacy keys, re-save under the new keys.
+  if (
+    localStorage.getItem(BRAND_LS_ID_KEY) === null ||
+    localStorage.getItem(BRAND_LS_NAME_KEY) === null
+  ) {
+    localStorage.setItem(BRAND_LS_ID_KEY, id)
+    localStorage.setItem(BRAND_LS_NAME_KEY, name || 'Guest')
+    localStorage.removeItem(LEGACY_LS_ID_KEY)
+    localStorage.removeItem(LEGACY_LS_NAME_KEY)
+  }
+
   return {
     id,
     email: '',
@@ -41,5 +76,8 @@ export function getGuestProfile() {
     games_won: 0,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
+    role: 'user',
+    is_disabled: false,
+    is_banned: false,
   }
 }

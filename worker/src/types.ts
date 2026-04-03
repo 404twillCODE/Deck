@@ -62,6 +62,7 @@ export interface TableSettings {
   maxPlayers: number
   startingChips: number
   minimumBet: number
+  freePlay: boolean
   /** Uno: hand size at deal (default 7). */
   cardsPerPlayer?: number
   /** Uno: round wins needed to take the match; then wins reset and a new match starts. */
@@ -154,7 +155,7 @@ export interface RoomState {
 }
 
 export type ClientMessage =
-  | { type: 'join_room'; payload: { roomCode: string; token: string; displayName?: string } }
+  | { type: 'join_room'; payload: { roomCode: string; token: string; displayName?: string; accountChips?: number } }
   | { type: 'leave_room' }
   | { type: 'player_ready' }
   | { type: 'start_game' }

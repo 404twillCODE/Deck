@@ -4,7 +4,7 @@ set -e
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo "============================================"
-echo "          DECK - Game Server Launcher"
+echo "          FUNDECK - Game Server Launcher"
 echo "============================================"
 echo ""
 
@@ -48,7 +48,7 @@ sleep 2 && open "http://localhost:3000" 2>/dev/null &
 
 cd "$ROOT_DIR"
 echo "============================================"
-echo "   Deck is running!"
+echo "   FunDeck is running!"
 echo ""
 echo "   Frontend : http://localhost:3000"
 echo "   Worker   : http://localhost:8787"

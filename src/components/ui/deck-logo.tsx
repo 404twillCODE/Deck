@@ -2,12 +2,12 @@
 
 import { cn } from '@/lib/utils'
 
-interface DeckLogoProps {
+interface FunDeckLogoProps {
   size?: 'sm' | 'md' | 'lg'
   className?: string
 }
 
-export function DeckLogo({ size = 'md', className }: DeckLogoProps) {
+export function FunDeckLogo({ size = 'md', className }: FunDeckLogoProps) {
   const config = {
     sm: { container: 'w-7 h-7', card: 'w-3 h-[17px] text-[6px] rounded-[2px]' },
     md: { container: 'w-8 h-8', card: 'w-3.5 h-5 text-[8px] rounded-[3px]' },

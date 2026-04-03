@@ -1,7 +1,7 @@
 import type { BlackjackState, PokerState, UnoState, HotPotatoState, Player, TableSettings, Card } from './game'
 
 export type ClientMessage =
-  | { type: 'join_room'; payload: { roomCode: string; token: string; displayName?: string } }
+  | { type: 'join_room'; payload: { roomCode: string; token: string; displayName?: string; accountChips?: number } }
   | { type: 'leave_room' }
   | { type: 'player_ready' }
   | { type: 'start_game' }

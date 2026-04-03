@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
 
-interface DeckShuffleProps {
+interface FunDeckShuffleProps {
   show: boolean
   speed?: 'slow' | 'fast'
   onComplete?: () => void
@@ -82,7 +82,7 @@ function ShuffleCard({ index, phase, speed }: { index: number; phase: number; sp
   )
 }
 
-export function DeckShuffle({ show, speed = 'slow', onComplete, className }: DeckShuffleProps) {
+export function FunDeckShuffle({ show, speed = 'slow', onComplete, className }: FunDeckShuffleProps) {
   const [phase, setPhase] = useState(0)
   const [cycles, setCycles] = useState(0)
   const maxCycles = speed === 'slow' ? 3 : 2

@@ -15,13 +15,15 @@ export class GameWebSocket {
   private token = ''
   private roomCode = ''
   private displayName = 'Player'
+  private accountChips = 0
   private disposed = false
 
-  connect(url: string, token: string, roomCode: string, displayName: string): Promise<void> {
+  connect(url: string, token: string, roomCode: string, displayName: string, accountChips: number): Promise<void> {
     this.url = url
     this.token = token
     this.roomCode = roomCode
     this.displayName = displayName
+    this.accountChips = accountChips
     this.disposed = false
 
     return this.attemptConnect(3, 1200)
@@ -61,7 +63,7 @@ export class GameWebSocket {
           this.reconnectAttempts = 0
           this.send({
             type: 'join_room',
-            payload: { roomCode: this.roomCode, token: this.token, displayName: this.displayName },
+            payload: { roomCode: this.roomCode, token: this.token, displayName: this.displayName, accountChips: this.accountChips },
           })
           this.startPing()
           this.emitState('connected')

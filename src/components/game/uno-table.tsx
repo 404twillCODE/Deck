@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useGameStore } from '@/stores/game-store'
 import { useAuthStore } from '@/stores/auth-store'
-import { DeckShuffle } from '@/components/ui'
+import { FunDeckShuffle } from '@/components/ui'
 import { ArrowLeft, RotateCcw, RotateCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import Link from 'next/link'
@@ -382,7 +382,7 @@ export function UnoTable({ wsRef }: UnoTableProps) {
 
   return (
     <div className="min-h-dvh flex flex-col">
-      <DeckShuffle show={showShuffle} speed={shuffleSpeed} onComplete={onShuffleComplete} />
+      <FunDeckShuffle show={showShuffle} speed={shuffleSpeed} onComplete={onShuffleComplete} />
 
       <header className="sticky top-0 z-40 glass border-b border-white/[0.04]">
         <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">

@@ -13,7 +13,7 @@ import {
   RoomCodeBadge,
   StatusPill,
   PremiumInput,
-  DeckShuffle,
+  FunDeckShuffle,
 } from '@/components/ui'
 import { ArrowLeft, Coins, TrendingUp, HelpCircle, X } from 'lucide-react'
 import Link from 'next/link'
@@ -354,7 +354,7 @@ export function PokerTable({ wsRef }: PokerTableProps) {
 
   return (
     <div className="min-h-dvh flex flex-col bg-gradient-to-b from-transparent via-emerald-950/[0.03] to-transparent">
-      <DeckShuffle show={showShuffle} speed={shuffleSpeed} onComplete={onShuffleComplete} />
+      <FunDeckShuffle show={showShuffle} speed={shuffleSpeed} onComplete={onShuffleComplete} />
       <HandRankingsPanel open={showHandRankings} onClose={() => setShowHandRankings(false)} playerHandRank={playerHandRank} />
       {/* Header */}
       <header className="sticky top-0 z-40 glass border-b border-white/[0.04]">

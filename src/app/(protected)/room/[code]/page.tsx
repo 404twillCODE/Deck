@@ -31,9 +31,9 @@ import type {
   UnoState,
 } from '@/types'
 
-function useStatsRecorder() {
+function useStatsRecorder(isFreePlay: boolean) {
   const roomState = useGameStore((s) => s.roomState)
-  const { user, isGuest } = useAuthStore()
+  const { user, isGuest, setUser } = useAuthStore()
   const recordedRef = useRef<string>('')
 
   useEffect(() => {
@@ -68,7 +68,32 @@ function useStatsRecorder() {
 
     recordedRef.current = roundKey
     recordGameResult(user.id, gameType, won).catch(() => {})
-  }, [roomState?.gameState, roomState?.gameType, user, isGuest])
+
+    // Persist bankroll changes for chip-based play.
+    // For free-play rooms we intentionally do NOT touch user chip balance.
+    if (!isFreePlay) {
+      const maybeFinalChips =
+        gameType === 'blackjack'
+          ? (gs as BlackjackState).players.find((p) => p.id === user.id)?.chips
+          : gameType === 'poker'
+            ? (gs as PokerState).players.find((p) => p.id === user.id)?.chips
+            : gameType === 'uno'
+              ? null
+              : gameType === 'hot-potato'
+                ? null
+                : null
+
+      if (typeof maybeFinalChips === 'number') {
+        const supabase = createClient()
+        supabase
+          .from('profiles')
+          .update({ chips_balance: maybeFinalChips })
+          .eq('id', user.id)
+          .then(() => setUser({ ...user, chips_balance: maybeFinalChips }))
+          .catch(() => {})
+      }
+    }
+  }, [roomState?.gameState, roomState?.gameType, user, isGuest, isFreePlay, setUser])
 }
 
 function RoomContent() {
@@ -80,9 +105,11 @@ function RoomContent() {
   const [resolvedGameType, setResolvedGameType] = useState<string | null>(gameTypeQuery)
   const gameTypeParam = resolvedGameType || 'blackjack'
 
-  const { user } = useAuthStore()
+  const { user, isGuest } = useAuthStore()
+  const freePlayQuery = searchParams.get('freePlay')
+  const [isFreePlay, setIsFreePlay] = useState(freePlayQuery === '1')
   const addToast = useUIStore((s) => s.addToast)
-  useStatsRecorder()
+  useStatsRecorder(isFreePlay)
 
   const roomState = useGameStore((s) => s.roomState)
   const isConnected = useGameStore((s) => s.isConnected)
@@ -96,6 +123,7 @@ function RoomContent() {
   const resetStore = useGameStore((s) => s.reset)
 
   const [connStatus, setConnStatus] = useState<'connecting' | 'connected' | 'reconnecting' | 'failed'>('connecting')
+  const [freePlayUpdating, setFreePlayUpdating] = useState(false)
   const wsRef = useRef<GameWebSocket | null>(null)
   const mountedRef = useRef(true)
 
@@ -117,11 +145,12 @@ function RoomContent() {
           workerUrl = workerUrl.replace('localhost', window.location.hostname).replace('127.0.0.1', window.location.hostname)
         }
         const res = await fetch(`${workerUrl}/api/rooms/${code}`)
-        const data = res.ok ? await res.json() as { gameType?: string } : null
+        const data = res.ok ? await res.json() as { gameType?: string; freePlay?: boolean } : null
         const gt = data?.gameType || 'blackjack'
+        const fp = data?.freePlay ? '&freePlay=1' : ''
         if (cancelled) return
         setResolvedGameType(gt)
-        router.replace(`/room/${code}?game=${encodeURIComponent(gt)}`)
+        router.replace(`/room/${code}?game=${encodeURIComponent(gt)}${fp}`)
       } catch {
         if (cancelled) return
         setResolvedGameType('blackjack')
@@ -130,6 +159,30 @@ function RoomContent() {
 
     return () => { cancelled = true }
   }, [code, router, searchParams])
+
+  // If the room is free-play but the URL doesn't include `freePlay=1`,
+  // fetch the room metadata so chip syncing stays disabled.
+  useEffect(() => {
+    if (freePlayQuery) return
+    let cancelled = false
+
+    void (async () => {
+      try {
+        let workerUrl = process.env.NEXT_PUBLIC_WORKER_URL || 'http://localhost:8787'
+        if (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+          workerUrl = workerUrl.replace('localhost', window.location.hostname).replace('127.0.0.1', window.location.hostname)
+        }
+        const res = await fetch(`${workerUrl}/api/rooms/${code}`)
+        const data = res.ok ? await res.json() as { freePlay?: boolean } : null
+        if (cancelled) return
+        setIsFreePlay(!!data?.freePlay)
+      } catch {
+        // Ignore
+      }
+    })()
+
+    return () => { cancelled = true }
+  }, [code, freePlayQuery])
 
   const doConnect = useCallback(async (ws: GameWebSocket) => {
     try {
@@ -141,6 +194,24 @@ function RoomContent() {
         user?.username?.trim() ||
         'Player'
 
+      // Fetch bankroll at connect-time to avoid racing auth/profile hydration.
+      let accountChips = 0
+      if (user && !isGuest) {
+        try {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('chips_balance')
+            .eq('id', user.id)
+            .maybeSingle()
+          if (profile && typeof profile.chips_balance === 'number') accountChips = profile.chips_balance
+          else accountChips = user.chips_balance ?? 0
+        } catch {
+          accountChips = user.chips_balance ?? 0
+        }
+      } else {
+        accountChips = user?.chips_balance ?? 0
+      }
+
       let workerUrl = process.env.NEXT_PUBLIC_WORKER_URL || 'http://localhost:8787'
       if (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
         workerUrl = workerUrl.replace('localhost', window.location.hostname).replace('127.0.0.1', window.location.hostname)
@@ -150,14 +221,14 @@ function RoomContent() {
       const pathPrefix = u.pathname === '/' ? '' : u.pathname.replace(/\/$/, '')
       const wsUrl = `${wsProto}//${u.host}${pathPrefix}/ws/room/${code}?game=${encodeURIComponent(gameTypeParam)}`
 
-      await ws.connect(wsUrl, token, code, displayName)
+      await ws.connect(wsUrl, token, code, displayName, accountChips)
     } catch {
       if (mountedRef.current) {
         setConnectionError('Failed to connect to game server')
         setConnStatus('failed')
       }
     }
-  }, [code, gameTypeParam, user?.display_name, user?.username, setConnectionError])
+  }, [code, gameTypeParam, user?.display_name, user?.username, user?.id, user?.chips_balance, isGuest, setConnectionError])
 
   useEffect(() => {
     if (!resolvedGameType) return
@@ -247,12 +318,49 @@ function RoomContent() {
   const isHost = roomState?.hostId === user?.id
   const allReady = roomState?.players?.every((p) => p.isReady) && (roomState?.players?.length ?? 0) >= 2
 
+  // Authoritative: follow the room's actual setting (so toggles update everyone).
+  useEffect(() => {
+    if (typeof roomState?.settings?.freePlay === 'boolean') setIsFreePlay(!!roomState.settings.freePlay)
+  }, [roomState?.settings?.freePlay])
+
   function handleReady() {
     wsRef.current?.send({ type: 'player_ready' })
   }
 
   function handleStartGame() {
     wsRef.current?.send({ type: 'start_game' })
+  }
+
+  async function handleToggleFreePlay(next: boolean) {
+    if (!roomState || !user) return
+    if (!isHost) return
+    if (roomState.isStarted) return
+    if (roomState.gameType !== 'blackjack' && roomState.gameType !== 'poker') return
+
+    setFreePlayUpdating(true)
+    try {
+      let workerUrl = process.env.NEXT_PUBLIC_WORKER_URL || 'http://localhost:8787'
+      if (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+        workerUrl = workerUrl.replace('localhost', window.location.hostname).replace('127.0.0.1', window.location.hostname)
+      }
+
+      const res = await fetch(`${workerUrl}/api/rooms/${code}/freeplay`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ freePlay: next }),
+      })
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err?.error || `Failed to update free play (${res.status})`)
+      }
+
+      setIsFreePlay(next)
+    } catch (e) {
+      addToast({ type: 'error', title: 'Free Play update failed', message: e instanceof Error ? e.message : 'Try again.' })
+    } finally {
+      setFreePlayUpdating(false)
+    }
   }
 
   function handleRetry() {
@@ -413,6 +521,37 @@ function RoomContent() {
                 Players ({roomState?.players?.length || 0}/{roomState?.maxPlayers || '—'})
               </h3>
             </div>
+
+            {isHost && !roomState?.isStarted && (roomState?.gameType === 'blackjack' || roomState?.gameType === 'poker') && (
+              <div className="mb-4 flex items-center justify-between p-4 rounded-xl glass border border-white/[0.06]">
+                <div className="flex flex-col">
+                  <span className="text-sm font-medium text-text-primary">Free Play</span>
+                  <span className="text-xs text-text-tertiary">Uses table chips (starting chips)</span>
+                </div>
+
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="sr-only"
+                    checked={isFreePlay}
+                    disabled={freePlayUpdating}
+                    onChange={(e) => void handleToggleFreePlay(e.target.checked)}
+                    aria-label="Free Play"
+                  />
+                  <span
+                    className={`w-12 h-6 rounded-full transition-colors duration-200 ${
+                      isFreePlay ? 'bg-accent/60' : 'bg-white/10'
+                    }`}
+                  />
+                  <span
+                    className={`absolute left-1 top-1 w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${
+                      isFreePlay ? 'translate-x-6' : 'translate-x-0'
+                    } ${freePlayUpdating ? 'opacity-70' : ''}`}
+                  />
+                </label>
+              </div>
+            )}
+
             <div className="space-y-2">
               <AnimatePresence mode="popLayout">
                 {roomState?.players?.map((player) => (

@@ -1,4 +1,4 @@
--- Deck — Supabase Schema
+-- FunDeck — Supabase Schema
 -- Run this in the Supabase SQL editor to set up your database.
 -- Safe to re-run — all statements are idempotent.
 
@@ -26,9 +26,23 @@ create policy "Profiles are viewable by everyone"
   using (true);
 
 drop policy if exists "Users can update own profile" on public.profiles;
+-- Users can only change their chips by resetting to 10,000.
+-- For any other self-updates (like display_name), `chips_balance` is unchanged,
+-- so the policy allows the update when new chips_balance matches the old value.
 create policy "Users can update own profile"
   on public.profiles for update
-  using (auth.uid() = id);
+  using (auth.uid() = id)
+  with check (
+    auth.uid() = id
+    and (
+      chips_balance = (
+        select p.chips_balance
+        from public.profiles p
+        where p.id = auth.uid()
+      )
+      or chips_balance = 10000
+    )
+  );
 
 drop policy if exists "Users can insert own profile" on public.profiles;
 create policy "Users can insert own profile"

@@ -23,8 +23,8 @@ export async function joinRoomByCode(code: string, router: { push: RouterPush })
   try {
     const res = await fetch(`${workerUrl}/api/rooms/${normalized}`)
     if (res.ok) {
-      const data = (await res.json()) as { gameType: string }
-      router.push(`/room/${normalized}?game=${data.gameType}`)
+      const data = (await res.json()) as { gameType: string; freePlay?: boolean }
+      router.push(`/room/${normalized}?game=${data.gameType}${data.freePlay ? '&freePlay=1' : ''}`)
     } else {
       router.push(`/room/${normalized}?game=blackjack`)
     }

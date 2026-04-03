@@ -1,10 +1,10 @@
 'use client'
 
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { motion, useScroll, useTransform, AnimatePresence } from 'framer-motion'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { AnimatedButton, DeckLogo } from '@/components/ui'
+import { AnimatedButton, FunDeckLogo } from '@/components/ui'
 import { ArrowRight, Users, Shield, Zap, Sparkles, Search, Loader2 } from 'lucide-react'
 import { generateRoomCode, normalizeRoomCodeInput, looksLikeRoomCode } from '@/lib/utils'
 import { joinRoomByCode } from '@/lib/room-join'
@@ -123,7 +123,7 @@ function HeroSection() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, delay: 0.2 }}
         >
-          <span className="text-gradient">Your deck</span>
+          <span className="text-gradient">Your FunDeck</span>
           <br />
           <span className="text-gradient-accent">is waiting.</span>
         </motion.h1>
@@ -167,7 +167,7 @@ function HeroSection() {
                 transition={{ duration: 0.25 }}
                 className="w-full max-w-xs overflow-hidden"
               >
-                <div className="flex gap-2 pt-1">
+                <div className="flex pt-1">
                   <input
                     type="text"
                     placeholder="Room code"
@@ -193,9 +193,6 @@ function HeroSection() {
                     autoFocus
                     className="flex-1 px-4 py-3 rounded-xl glass text-text-primary placeholder:text-text-tertiary text-sm font-mono tracking-widest text-center focus:outline-none focus:ring-1 focus:ring-accent/30 bg-transparent uppercase"
                   />
-                  <AnimatedButton onClick={handleJoin} disabled={roomCode.trim().length < 4} loading={joining}>
-                    Go
-                  </AnimatedButton>
                 </div>
               </motion.div>
             )}
@@ -391,24 +388,15 @@ function GameShowcase() {
   const [category, setCategory] = useState('all')
   const [creatingGame, setCreatingGame] = useState<string | null>(null)
   const [libraryJoining, setLibraryJoining] = useState(false)
-  const lastLibraryJoinRef = useRef<string>('')
 
   const codeQuery = looksLikeRoomCode(search)
 
-  useEffect(() => {
-    if (!codeQuery) {
-      lastLibraryJoinRef.current = ''
-      return
-    }
+  const handleJoinFromSearch = useCallback(() => {
+    if (!codeQuery) return
     const n = normalizeRoomCodeInput(search)
-    const t = window.setTimeout(() => {
-      if (lastLibraryJoinRef.current === n) return
-      lastLibraryJoinRef.current = n
-      setLibraryJoining(true)
-      void joinRoomByCode(n, router).finally(() => setLibraryJoining(false))
-    }, 250)
-    return () => clearTimeout(t)
-  }, [search, codeQuery, router])
+    setLibraryJoining(true)
+    void joinRoomByCode(n, router).finally(() => setLibraryJoining(false))
+  }, [codeQuery, search, router])
 
   const filtered = GAMES.filter((g) => {
     if (category !== 'all' && g.category !== category) return false
@@ -466,20 +454,53 @@ function GameShowcase() {
         </motion.div>
 
         {/* Search — game names or a 6-character room code */}
-        <div className="relative max-w-md mx-auto mb-8">
-          {libraryJoining ? (
-            <Loader2 className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-accent-light animate-spin pointer-events-none" />
-          ) : (
+        <motion.div
+          className="relative max-w-md mx-auto mb-8 flex items-center justify-center gap-3 px-2"
+          initial={{ opacity: 0, y: 10 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.35, ease: 'easeOut' }}
+        >
+          <motion.div
+            className="relative"
+            layout
+            initial={false}
+            animate={{ width: codeQuery ? 250 : 320 }}
+            transition={{ type: 'spring', stiffness: 320, damping: 28 }}
+          >
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-text-tertiary pointer-events-none" />
-          )}
           <input
             type="text"
             placeholder="Search games or enter a room code…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-11 pr-4 py-3 rounded-xl glass text-text-primary placeholder:text-text-tertiary text-sm focus:outline-none focus:ring-1 focus:ring-accent/30 bg-transparent"
+            className={`w-full pl-11 py-3 rounded-xl glass text-text-primary placeholder:text-text-tertiary text-sm focus:outline-none focus:ring-1 focus:ring-accent/30 bg-transparent ${
+              'pr-4'
+            }`}
           />
-        </div>
+          </motion.div>
+          <AnimatePresence mode="wait">
+            {codeQuery ? (
+              <motion.div
+                key="join"
+                initial={{ opacity: 0, x: 14, scale: 0.98 }}
+                animate={{ opacity: 1, x: 0, scale: 1 }}
+                exit={{ opacity: 0, x: 14, scale: 0.98 }}
+                transition={{ duration: 0.18, ease: 'easeOut', delay: 0.06 }}
+              >
+                <AnimatedButton
+                  size="sm"
+                  variant="secondary"
+                  onClick={handleJoinFromSearch}
+                  loading={libraryJoining}
+                  disabled={libraryJoining}
+                >
+                  Join Game
+                </AnimatedButton>
+              </motion.div>
+            ) : null}
+          </AnimatePresence>
+        </motion.div>
 
         {/* Category filters */}
         <div className="flex justify-center gap-2 mb-10 flex-wrap">
@@ -581,6 +602,7 @@ function GameShowcase() {
 }
 
 function CTASection() {
+  const discordUrl = process.env.NEXT_PUBLIC_DISCORD_URL
   return (
     <section className="relative py-32 px-4">
       <div className="max-w-2xl mx-auto text-center">
@@ -593,13 +615,31 @@ function CTASection() {
           <h2 className="text-3xl md:text-5xl font-bold text-gradient mb-6">
             Ready to deal?
           </h2>
-          <p className="text-text-secondary text-lg mb-10">
+          <p className="text-text-secondary text-lg mb-4">
             Create your free account and start playing in under a minute.
           </p>
-          <AnimatedButton href="/signup" size="lg" className="min-w-[200px]">
-            Create Account
-            <ArrowRight className="h-4 w-4" />
-          </AnimatedButton>
+
+          <p className="text-text-tertiary text-sm mb-8">
+            Need support or have suggestions? Join the Discord.
+          </p>
+
+          <div className="flex items-center justify-center gap-3 flex-wrap">
+            <AnimatedButton href="/signup" size="lg" className="min-w-[220px]">
+              Create Account
+              <ArrowRight className="h-4 w-4" />
+            </AnimatedButton>
+
+            {discordUrl ? (
+              <AnimatedButton
+                href={discordUrl}
+                size="lg"
+                variant="secondary"
+                className="min-w-[220px]"
+              >
+                Join Discord
+              </AnimatedButton>
+            ) : null}
+          </div>
         </motion.div>
       </div>
     </section>
@@ -611,11 +651,11 @@ function Footer() {
     <footer className="border-t border-white/[0.04] py-8 px-4">
       <div className="max-w-5xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
         <div className="flex items-center gap-2">
-          <DeckLogo size="sm" />
-          <span className="text-sm font-semibold text-text-primary">Deck</span>
+          <FunDeckLogo size="sm" />
+          <span className="text-sm font-semibold text-text-primary">FunDeck</span>
         </div>
         <p className="text-xs text-text-tertiary">
-          &copy; {new Date().getFullYear()} Deck. Built for game night.
+          &copy; {new Date().getFullYear()} FunDeck. Built for game night.
         </p>
       </div>
     </footer>
@@ -625,18 +665,51 @@ function Footer() {
 function NavBar() {
   const { user, isLoading } = useAuthStore()
   const isSignedIn = !!user
+  const [adminAccess, setAdminAccess] = useState(false)
+  const attemptedRef = useRef(false)
+
+  useEffect(() => {
+    if (isLoading) return
+    if (!user) {
+      setAdminAccess(false)
+      attemptedRef.current = false
+      return
+    }
+
+    const role = user?.role ?? ''
+    if (role === 'admin' || role === 'moderator') {
+      setAdminAccess(true)
+      attemptedRef.current = true
+      return
+    }
+
+    // Fallback: if role hydration is delayed/blocked, verify via admin API.
+    if (attemptedRef.current) return
+    attemptedRef.current = true
+
+    void fetch('/api/admin/stats')
+      .then((res) => {
+        if (res.ok) setAdminAccess(true)
+      })
+      .catch(() => {})
+  }, [isLoading, user])
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 px-4 py-4">
       <div className="max-w-5xl mx-auto flex items-center justify-between">
         <Link href="/" className="flex items-center gap-2.5">
-          <DeckLogo />
-          <span className="text-lg font-semibold text-text-primary">Deck</span>
+          <FunDeckLogo />
+          <span className="text-lg font-semibold text-text-primary">FunDeck</span>
         </Link>
         {!isLoading && (
           <div className="flex items-center gap-3">
             {isSignedIn ? (
               <>
+                {adminAccess && (
+                  <AnimatedButton href="/admin" variant="ghost" size="sm">
+                    Admin
+                  </AnimatedButton>
+                )}
                 <AnimatedButton href="/profile" variant="ghost" size="sm">Profile</AnimatedButton>
                 <AnimatedButton href="/leaderboard" variant="ghost" size="sm">Leaderboard</AnimatedButton>
               </>

@@ -21,7 +21,7 @@ export class HotPotatoTableDO extends DurableObject<Env> {
   private connections: Map<string, Connection> = new Map()
   private roomCode = ''
   private hostId = ''
-  private settings: TableSettings = { gameType: 'hot-potato', maxPlayers: 10, startingChips: 0, minimumBet: 0 }
+  private settings: TableSettings = { gameType: 'hot-potato', maxPlayers: 10, startingChips: 0, minimumBet: 0, freePlay: false }
   private players: HotPotatoPlayerInternal[] = []
   private isStarted = false
 
@@ -53,6 +53,7 @@ export class HotPotatoTableDO extends DurableObject<Env> {
         active: this.roomCode !== '' || this.players.length > 0,
         gameType: 'hot-potato',
         players: this.players.length,
+        freePlay: this.settings.freePlay,
       }))
     }
 

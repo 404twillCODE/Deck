@@ -9,7 +9,16 @@ import type { AuthChangeEvent, Session, User } from '@supabase/supabase-js'
 type InitialAuthUser = Pick<User, 'id' | 'email' | 'user_metadata'>
 
 function toProfile(user: User, dbRow: Record<string, unknown> | null): UserProfile {
-  if (dbRow) return dbRow as unknown as UserProfile
+  if (dbRow) {
+    const row = dbRow as unknown as UserProfile
+    return {
+      ...row,
+      role: row.role ?? 'user',
+      is_disabled: row.is_disabled ?? false,
+      is_banned: row.is_banned ?? false,
+      chips_balance: typeof row.chips_balance === 'number' ? row.chips_balance : 10000,
+    }
+  }
   return {
     id: user.id,
     email: user.email || '',
@@ -20,6 +29,9 @@ function toProfile(user: User, dbRow: Record<string, unknown> | null): UserProfi
     games_won: 0,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
+    role: 'user',
+    is_disabled: false,
+    is_banned: false,
   }
 }
 

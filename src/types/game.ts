@@ -160,6 +160,7 @@ export interface TableSettings {
   startingChips: number
   minimumBet: number
   isPrivate: boolean
+  freePlay: boolean
   cardsPerPlayer?: number
   winsToWin?: number
 }

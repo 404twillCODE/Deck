@@ -85,6 +85,7 @@ export default {
         minimumBet?: number
         cardsPerPlayer?: number
         winsToWin?: number
+        freePlay?: boolean
       }
 
       try {
@@ -126,7 +127,7 @@ export default {
           body: JSON.stringify({
             code: body.code,
             hostId,
-            settings: { ...baseSettings, ...unoExtras },
+            settings: { ...baseSettings, ...unoExtras, freePlay: body.freePlay === true },
           }),
         }))
 
@@ -156,7 +157,9 @@ export default {
       const code = roomLookupMatch[1]
       const gameType = roomRegistry.get(code)
       if (gameType) {
-        return json(request, env, { code, gameType })
+            // When the room is in the local registry, we only know gameType.
+            // The durable object /info endpoint is queried for freePlay below if needed.
+            return json(request, env, { code, gameType })
       }
       // Room not in registry — could have been created in a different isolate.
       // Try both DOs by querying their /info endpoint.
@@ -167,15 +170,76 @@ export default {
         try {
           const res = await stub.fetch(new Request('https://internal/info'))
           if (res.ok) {
-            const info = await res.json() as { active: boolean; gameType: string }
+            const info = await res.json() as { active: boolean; gameType: string; freePlay?: boolean }
             if (info.active) {
               roomRegistry.set(code, type)
-              return json(request, env, { code, gameType: type })
+              return json(request, env, { code, gameType: type, freePlay: !!info.freePlay })
             }
           }
         } catch { /* ignore */ }
       }
       return json(request, env, { error: 'Room not found' }, 404)
+    }
+
+    // ─── REST: Toggle Free Play ────────────────────────────
+    const freeplayMatch = url.pathname.match(/^\/api\/rooms\/([A-Z0-9]+)\/freeplay$/)
+    if (freeplayMatch && request.method === 'POST') {
+      const code = freeplayMatch[1]
+      let body: { freePlay?: boolean } = {}
+      try {
+        body = await request.json() as { freePlay?: boolean }
+      } catch {
+        return json(request, env, { error: 'Invalid JSON body' }, 400)
+      }
+
+      const freePlay = body.freePlay === true
+
+      let gameType = roomRegistry.get(code)
+      if (!gameType) {
+        for (const type of ['blackjack', 'poker', 'uno', 'hot-potato'] as const) {
+          const ns = type === 'poker' ? env.POKER_TABLE : type === 'uno' ? env.UNO_TABLE : type === 'hot-potato' ? env.HOT_POTATO_TABLE : env.BLACKJACK_TABLE
+          const id = ns.idFromName(code)
+          const stub = ns.get(id)
+          try {
+            const res = await stub.fetch(new Request('https://internal/info'))
+            if (res.ok) {
+              const info = await res.json() as { active: boolean; gameType: string }
+              if (info.active) {
+                gameType = type
+                break
+              }
+            }
+          } catch { /* ignore */ }
+        }
+      }
+
+      if (!gameType) return json(request, env, { error: 'Room not found' }, 404)
+
+      const namespace =
+        gameType === 'poker' ? env.POKER_TABLE
+          : gameType === 'uno' ? env.UNO_TABLE
+            : gameType === 'hot-potato' ? env.HOT_POTATO_TABLE
+              : env.BLACKJACK_TABLE
+
+      const id = namespace.idFromName(code)
+      const stub = namespace.get(id)
+
+      try {
+        const toggleRes = await stub.fetch(new Request('https://internal/freeplay', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ freePlay }),
+        }))
+        if (!toggleRes.ok) {
+          const err = await toggleRes.json().catch(() => ({}))
+          return json(request, env, { error: err?.error || 'Failed to update free play' }, toggleRes.status)
+        }
+      } catch {
+        // If the room isolate is gone, treat it as not found.
+        return json(request, env, { error: 'Room not found' }, 404)
+      }
+
+      return json(request, env, { success: true, freePlay })
     }
 
     // ─── REST: Health ─────────────────────────────────────

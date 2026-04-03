@@ -10,7 +10,7 @@ import {
   ChipStack,
   RoomCodeBadge,
   StatusPill,
-  DeckShuffle,
+  FunDeckShuffle,
 } from '@/components/ui'
 import { ArrowLeft, Coins } from 'lucide-react'
 import Link from 'next/link'
@@ -231,7 +231,7 @@ export function BlackjackTable({ wsRef }: BlackjackTableProps) {
 
   return (
     <div className="min-h-dvh flex flex-col bg-gradient-to-b from-transparent via-emerald-950/[0.03] to-transparent">
-      <DeckShuffle show={showShuffle} speed={shuffleSpeed} onComplete={onShuffleComplete} />
+      <FunDeckShuffle show={showShuffle} speed={shuffleSpeed} onComplete={onShuffleComplete} />
       {/* Header */}
       <header className="sticky top-0 z-40 glass border-b border-white/[0.04]">
         <div className="max-w-7xl mx-auto px-4 md:px-8 h-14 md:h-16 flex items-center justify-between">

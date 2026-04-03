@@ -9,6 +9,11 @@ export interface UserProfile {
   games_won: number
   created_at: string
   updated_at: string
+
+  // Admin/moderation fields (backed by Supabase RLS policies).
+  role?: 'admin' | 'moderator' | 'user'
+  is_disabled?: boolean
+  is_banned?: boolean
 }
 
 export interface AuthState {
