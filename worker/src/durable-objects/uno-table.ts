@@ -430,11 +430,33 @@ export class UnoTableDO extends DurableObject<Env> {
     const stackedSameNumber =
       topBefore != null && this.sameRankNumbers(card, topBefore)
 
-    if (stackedSameNumber) {
+    const playedRank =
+      card.type === 'number' && card.value !== undefined ? Number(card.value) : NaN
+    const hasAnotherSameRankInHand =
+      !Number.isNaN(playedRank) &&
+      hand.some(
+        (c) =>
+          c.type === 'number' &&
+          c.value !== undefined &&
+          Number(c.value) === playedRank,
+      )
+
+    /** Chain more of the same number you played — same rank on pile, or color/symbol match with another that rank still in hand. */
+    const shouldEnterNumberChain =
+      hand.length > 0 &&
+      card.type === 'number' &&
+      !Number.isNaN(playedRank) &&
+      (stackedSameNumber || hasAnotherSameRankInHand)
+
+    if (shouldEnterNumberChain) {
       this.mayPassAfterNumberStack = true
-      this.stackChainRank = card.value!
-      this.broadcastPersonalized()
-      return
+      this.stackChainRank = playedRank
+      if (this.handHasPlayable(hand)) {
+        this.broadcastPersonalized()
+        return
+      }
+      this.mayPassAfterNumberStack = false
+      this.stackChainRank = null
     }
 
     this.applyEffect(card)
@@ -547,7 +569,7 @@ export class UnoTableDO extends DurableObject<Env> {
   private sameRankNumbers(a: UnoCard, b: UnoCard): boolean {
     if (a.type !== 'number' || b.type !== 'number') return false
     if (a.value === undefined || b.value === undefined) return false
-    return a.value === b.value
+    return Number(a.value) === Number(b.value)
   }
 
   /** Color shown on the discard for matching: wild uses chosen color; else the card's face color. */
@@ -566,7 +588,11 @@ export class UnoTableDO extends DurableObject<Env> {
     /** Mid stack: only the rank from the card you played (stackChainRank), plus wilds. */
     if (this.mayPassAfterNumberStack && this.stackChainRank != null) {
       if (card.type === 'wild' || card.type === 'wild_draw_four') return true
-      return card.type === 'number' && card.value === this.stackChainRank
+      return (
+        card.type === 'number' &&
+        card.value !== undefined &&
+        Number(card.value) === Number(this.stackChainRank)
+      )
     }
 
     if (card.type === 'wild' || card.type === 'wild_draw_four') return true

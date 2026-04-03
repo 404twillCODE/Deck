@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect, useRef, useMemo, useLayoutEffect } from 'react'
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useGameStore } from '@/stores/game-store'
 import { useAuthStore } from '@/stores/auth-store'
@@ -67,7 +67,7 @@ function sortUnoHand(cards: UnoCard[]): UnoCard[] {
 function sameRankNumbers(a: UnoCard, b: UnoCard): boolean {
   if (a.type !== 'number' || b.type !== 'number') return false
   if (a.value === undefined || b.value === undefined) return false
-  return a.value === b.value
+  return Number(a.value) === Number(b.value)
 }
 
 function effectiveTopColor(top: UnoCard, currentColor: UnoColor): UnoColor | null {
@@ -199,43 +199,6 @@ function UnoCardView({ card, onClick, disabled, small, faceDown }: {
   )
 }
 
-type UnoHandLayout =
-  | { mode: 'spaced'; gapPx: number; cardWidth: number; scale: number }
-  | { mode: 'overlap'; stripePx: number; cardWidth: number; scale: number }
-
-function computeUnoHandLayout(
-  cardCount: number,
-  availWidth: number,
-  narrowViewport: boolean,
-): UnoHandLayout {
-  const cardW = narrowViewport ? 62 : 72
-  const gapPx = 6
-  if (cardCount <= 0) {
-    return { mode: 'spaced', gapPx: 0, cardWidth: cardW, scale: 1 }
-  }
-  if (cardCount === 1) {
-    return { mode: 'spaced', gapPx: 0, cardWidth: cardW, scale: 1 }
-  }
-
-  const naturalSpaced = cardCount * cardW + (cardCount - 1) * gapPx
-  if (availWidth > 0 && naturalSpaced <= availWidth) {
-    return { mode: 'spaced', gapPx, cardWidth: cardW, scale: 1 }
-  }
-
-  const minStripe = narrowViewport ? 14 : 18
-  const stripeRaw = availWidth > 0 ? (availWidth - cardW) / (cardCount - 1) : minStripe
-
-  if (stripeRaw >= minStripe) {
-    return { mode: 'overlap', stripePx: stripeRaw, cardWidth: cardW, scale: 1 }
-  }
-
-  const stripePx = minStripe
-  const naturalOverlap = cardW + (cardCount - 1) * stripePx
-  const scale =
-    availWidth > 0 ? Math.min(1, availWidth / naturalOverlap) : 1
-  return { mode: 'overlap', stripePx, cardWidth: cardW, scale }
-}
-
 function UnoHandRow({
   cards,
   canPlayCard,
@@ -245,61 +208,11 @@ function UnoHandRow({
   canPlayCard: (card: UnoCard) => boolean
   onPlayCard: (card: UnoCard) => void
 }) {
-  const containerRef = useRef<HTMLDivElement>(null)
-  const [layout, setLayout] = useState<UnoHandLayout>(() => ({
-    mode: 'spaced',
-    gapPx: 6,
-    cardWidth: 72,
-    scale: 1,
-  }))
-
-  useLayoutEffect(() => {
-    const el = containerRef.current
-    if (!el) return
-
-    function measure() {
-      const node = containerRef.current
-      if (!node) return
-      const avail = node.clientWidth
-      const narrow = typeof window !== 'undefined' && window.innerWidth < 640
-      setLayout(computeUnoHandLayout(cards.length, avail, narrow))
-    }
-
-    measure()
-    const ro = new ResizeObserver(measure)
-    ro.observe(el)
-    window.addEventListener('resize', measure)
-    return () => {
-      ro.disconnect()
-      window.removeEventListener('resize', measure)
-    }
-  }, [cards.length])
-
-  const cardH = layout.cardWidth === 62 ? 90 : 104
-  const naturalWidth =
-    cards.length === 0
-      ? 0
-      : layout.mode === 'spaced'
-        ? cards.length * layout.cardWidth + (cards.length - 1) * layout.gapPx
-        : layout.cardWidth + (cards.length - 1) * layout.stripePx
-
-  const minH = cardH * layout.scale + 20
-
-  const row = (
-    <div
-      className="flex flex-nowrap items-end justify-center"
-      style={{
-        width: naturalWidth || undefined,
-        gap: layout.mode === 'spaced' ? layout.gapPx : undefined,
-      }}
-    >
-      <AnimatePresence mode="popLayout">
-        {cards.map((card, i) => {
-          const overlapShift =
-            layout.mode === 'overlap' && i > 0
-              ? -(layout.cardWidth - layout.stripePx)
-              : 0
-          return (
+  return (
+    <div className="w-full max-w-full overflow-x-auto overflow-y-visible pb-2 pt-1 [scrollbar-width:thin]">
+      <div className="flex w-max max-w-none mx-auto flex-nowrap items-end gap-2 sm:gap-3 px-1 min-h-[108px] sm:min-h-[120px]">
+        <AnimatePresence mode="popLayout">
+          {cards.map((card, i) => (
             <motion.div
               key={card.id}
               layout
@@ -307,10 +220,7 @@ function UnoHandRow({
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -30, scale: 0.8 }}
               className="relative flex-shrink-0"
-              style={{
-                marginLeft: overlapShift,
-                zIndex: i,
-              }}
+              style={{ zIndex: i }}
             >
               <UnoCardView
                 card={card}
@@ -318,41 +228,9 @@ function UnoHandRow({
                 disabled={!canPlayCard(card)}
               />
             </motion.div>
-          )
-        })}
-      </AnimatePresence>
-    </div>
-  )
-
-  return (
-    <div
-      ref={containerRef}
-      className="w-full max-w-full overflow-x-hidden flex justify-center items-end px-1"
-      style={{ minHeight: minH }}
-    >
-      {layout.scale < 1 && naturalWidth > 0 ? (
-        <div
-          className="flex-shrink-0 overflow-visible"
-          style={{
-            width: naturalWidth * layout.scale,
-            height: cardH * layout.scale,
-          }}
-        >
-          <div
-            className="overflow-visible"
-            style={{
-              width: naturalWidth,
-              height: cardH,
-              transform: `scale(${layout.scale})`,
-              transformOrigin: 'bottom left',
-            }}
-          >
-            {row}
-          </div>
-        </div>
-      ) : (
-        row
-      )}
+          ))}
+        </AnimatePresence>
+      </div>
     </div>
   )
 }
@@ -453,7 +331,11 @@ export function UnoTable({ wsRef }: UnoTableProps) {
 
       if (gameState.canPassAfterNumberStack && stackRank != null) {
         if (card.type === 'wild' || card.type === 'wild_draw_four') return true
-        return card.type === 'number' && card.value === stackRank
+        return (
+          card.type === 'number' &&
+          card.value !== undefined &&
+          Number(card.value) === Number(stackRank)
+        )
       }
 
       if (card.type === 'wild' || card.type === 'wild_draw_four') return true
@@ -500,7 +382,8 @@ export function UnoTable({ wsRef }: UnoTableProps) {
   const canEndTurn =
     isMyTurn &&
     !hasPending &&
-    ((gameState.hasDrawnThisTurn && !hasPlayableInHand) || canPassStack)
+    ((gameState.hasDrawnThisTurn && !hasPlayableInHand) ||
+      (canPassStack && hasPlayableInHand))
   const canDraw = isMyTurn && (hasPending || !cannotDrawMoreFromPile)
   const drawLabel = hasPending ? `Draw ${gameState.pendingDraw}` : 'Draw'
 
@@ -594,8 +477,8 @@ export function UnoTable({ wsRef }: UnoTableProps) {
           )}
         </AnimatePresence>
 
-        {/* Fills space between top chrome and hand; centers piles vertically in that band */}
-        <div className="flex-1 flex flex-col min-h-0 justify-center items-center py-2">
+        {/* Arena + hand grouped and vertically centered — hand sits under piles, higher than viewport bottom */}
+        <div className="flex-1 flex flex-col min-h-0 justify-center items-center py-2 gap-8">
           <div className="flex flex-col items-center gap-4 w-full shrink-0">
           <div className="flex items-end justify-center gap-8 sm:gap-12">
             <div className="flex flex-col items-center gap-2">
@@ -664,58 +547,55 @@ export function UnoTable({ wsRef }: UnoTableProps) {
               )}
               {canEndTurn && (
                 <AnimatedButton size="sm" variant="secondary" onClick={() => wsRef.current?.send({ type: 'uno_pass' })}>
-                  {canPassStack ? 'Done stacking' : 'End turn'}
+                  {canPassStack && hasPlayableInHand ? 'Done stacking' : 'End turn'}
                 </AnimatedButton>
               )}
             </motion.div>
           )}
           </div>
-        </div>
 
-        {/* Win overlay */}
-        <AnimatePresence>
-          {gameState.phase === 'complete' && gameState.winnerId && (
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="glass rounded-2xl p-6 text-center mb-6">
-              <h3 className="text-xl font-bold text-gradient mb-2">
-                {gameState.matchComplete
-                  ? gameState.winnerId === user?.id
-                    ? 'You won the match!'
-                    : `${gameState.players.find((p) => p.id === gameState.winnerId)?.displayName ?? 'Winner'} won the match!`
-                  : gameState.winnerId === user?.id
-                    ? 'You win this round!'
-                    : `${gameState.players.find((p) => p.id === gameState.winnerId)?.displayName} wins this round!`}
-              </h3>
-              <p className="text-text-secondary text-sm mb-3">
-                {gameState.matchComplete ? 'New match starting soon...' : 'Next round starting soon...'}
-              </p>
-              <div className="flex justify-center gap-4 flex-wrap">
-                {gameState.players.map((p) => (
-                  <div key={p.id} className="text-center">
-                    <p className="text-xs text-text-tertiary">{p.displayName}</p>
-                    <p className="text-sm font-bold text-text-primary">
-                      {p.wins} {p.wins === 1 ? 'win' : 'wins'}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* My hand — pinned to bottom of layout; middle arena uses flex-1 above */}
-        <div className="shrink-0 flex flex-col pb-4 pt-2">
-          <div className="flex items-baseline justify-between gap-3 mb-3 px-1 shrink-0">
-            <p className="text-sm font-medium text-text-secondary">
-              Your hand · {myCards.length} {myCards.length === 1 ? 'card' : 'cards'}
-            </p>
-            {myPlayer != null && (
-              <span className="text-xs text-text-tertiary tabular-nums">
-                {myPlayer.wins} {myPlayer.wins === 1 ? 'win' : 'wins'}
-              </span>
+          {/* Win overlay */}
+          <AnimatePresence>
+            {gameState.phase === 'complete' && gameState.winnerId && (
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="glass rounded-2xl p-6 text-center w-full max-w-lg shrink-0">
+                <h3 className="text-xl font-bold text-gradient mb-2">
+                  {gameState.matchComplete
+                    ? gameState.winnerId === user?.id
+                      ? 'You won the match!'
+                      : `${gameState.players.find((p) => p.id === gameState.winnerId)?.displayName ?? 'Winner'} won the match!`
+                    : gameState.winnerId === user?.id
+                      ? 'You win this round!'
+                      : `${gameState.players.find((p) => p.id === gameState.winnerId)?.displayName} wins this round!`}
+                </h3>
+                <p className="text-text-secondary text-sm mb-3">
+                  {gameState.matchComplete ? 'New match starting soon...' : 'Next round starting soon...'}
+                </p>
+                <div className="flex justify-center gap-4 flex-wrap">
+                  {gameState.players.map((p) => (
+                    <div key={p.id} className="text-center">
+                      <p className="text-xs text-text-tertiary">{p.displayName}</p>
+                      <p className="text-sm font-bold text-text-primary">
+                        {p.wins} {p.wins === 1 ? 'win' : 'wins'}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
             )}
-          </div>
+          </AnimatePresence>
 
-          <div className="pb-2 pt-1">
+          {/* Hand — full gaps, no overlap; scroll horizontally when needed */}
+          <div className="shrink-0 flex flex-col w-full max-w-full pb-2">
+            <div className="flex items-baseline justify-between gap-3 mb-2 px-1 shrink-0">
+              <p className="text-sm font-medium text-text-secondary">
+                Your hand · {myCards.length} {myCards.length === 1 ? 'card' : 'cards'}
+              </p>
+              {myPlayer != null && (
+                <span className="text-xs text-text-tertiary tabular-nums">
+                  {myPlayer.wins} {myPlayer.wins === 1 ? 'win' : 'wins'}
+                </span>
+              )}
+            </div>
             <UnoHandRow cards={sortedMyCards} canPlayCard={canPlayCard} onPlayCard={handlePlayCard} />
           </div>
         </div>
