@@ -42,6 +42,8 @@ export interface UnoState {
   cannotDrawMoreFromPile: boolean
   /** After stacking same-number cards, use End turn to stop even if you could play more. */
   canPassAfterNumberStack: boolean
+  /** Rank you are chaining (from the last stacked card you played); only matching numbers + wilds are legal until you end the turn. */
+  numberStackRank: number | null
   pendingDraw: number
   pendingDrawType: 'draw_two' | 'wild_draw_four' | null
   lastAction: { playerId: string; action: string; card?: UnoCard } | null

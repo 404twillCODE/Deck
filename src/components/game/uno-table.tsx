@@ -449,10 +449,11 @@ export function UnoTable({ wsRef }: UnoTableProps) {
       if (gameState.pendingDrawType === 'wild_draw_four') return card.type === 'wild_draw_four' || card.type === 'draw_two'
 
       const top = gameState.discardTop
+      const stackRank = gameState.numberStackRank ?? null
 
-      if (gameState.canPassAfterNumberStack && top && top.type === 'number') {
+      if (gameState.canPassAfterNumberStack && stackRank != null) {
         if (card.type === 'wild' || card.type === 'wild_draw_four') return true
-        return sameRankNumbers(card, top)
+        return card.type === 'number' && card.value === stackRank
       }
 
       if (card.type === 'wild' || card.type === 'wild_draw_four') return true
@@ -516,7 +517,7 @@ export function UnoTable({ wsRef }: UnoTableProps) {
             <span className="text-sm font-semibold text-text-primary">UNO</span>
             <span className="text-xs text-text-tertiary">
               Round {gameState.roundNumber}
-              <span className="text-text-tertiary/70"> · First to {roomState?.settings?.winsToWin ?? 5} wins</span>
+              <span className="text-text-tertiary/70"> · First to {roomState?.settings?.winsToWin ?? 1} wins</span>
             </span>
           </div>
           <div className="flex items-center gap-2">

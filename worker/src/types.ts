@@ -29,6 +29,8 @@ export interface UnoState {
   cannotDrawMoreFromPile: boolean
   /** You may end your turn after a same-number stack while still holding playable cards. */
   canPassAfterNumberStack: boolean
+  /** While stacking numbers, only this rank (from the card you played) may be played next; null if not stacking. */
+  numberStackRank: number | null
   pendingDraw: number
   pendingDrawType: 'draw_two' | 'wild_draw_four' | null
   lastAction: { playerId: string; action: string; card?: UnoCard } | null

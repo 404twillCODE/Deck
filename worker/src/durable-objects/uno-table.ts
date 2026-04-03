@@ -31,7 +31,7 @@ export class UnoTableDO extends DurableObject<Env> {
   private connections: Map<string, Connection> = new Map()
   private roomCode = ''
   private hostId = ''
-  private settings: TableSettings = { gameType: 'uno', maxPlayers: 10, startingChips: 0, minimumBet: 0, winsToWin: 5 }
+  private settings: TableSettings = { gameType: 'uno', maxPlayers: 10, startingChips: 0, minimumBet: 0, winsToWin: 1 }
   private players: UnoPlayerInternal[] = []
   private isStarted = false
 
@@ -47,6 +47,8 @@ export class UnoTableDO extends DurableObject<Env> {
   private blockedDrawAfterPlayableFromPile = false
   /** After playing a number on a matching number, you may end the turn while still holding playable cards. */
   private mayPassAfterNumberStack = false
+  /** Rank being stacked (from the card you played); only that number + wilds may follow until turn ends or draw. */
+  private stackChainRank: number | null = null
   private pendingDraw = 0
   private pendingDrawType: 'draw_two' | 'wild_draw_four' | null = null
   private lastAction: { playerId: string; action: string; card?: UnoCard } | null = null
@@ -295,6 +297,7 @@ export class UnoTableDO extends DurableObject<Env> {
     this.hasDrawnThisTurn = false
     this.blockedDrawAfterPlayableFromPile = false
     this.mayPassAfterNumberStack = false
+    this.stackChainRank = null
     this.pendingDraw = 0
     this.pendingDrawType = null
     this.lastAction = null
@@ -349,6 +352,7 @@ export class UnoTableDO extends DurableObject<Env> {
     this.hasDrawnThisTurn = false
     this.blockedDrawAfterPlayableFromPile = false
     this.mayPassAfterNumberStack = false
+    this.stackChainRank = null
   }
 
   private advanceToNext() {
@@ -408,9 +412,11 @@ export class UnoTableDO extends DurableObject<Env> {
       this.pendingDraw = 0
       this.pendingDrawType = null
       this.blockedDrawAfterPlayableFromPile = false
+      this.mayPassAfterNumberStack = false
+      this.stackChainRank = null
       this.awardRoundWin(playerId)
       const winner = this.players.find((p) => p.id === playerId)
-      const target = Math.max(1, this.settings.winsToWin ?? 5)
+      const target = Math.max(1, this.settings.winsToWin ?? 1)
       this.matchComplete = winner != null && winner.wins >= target
       this.lastAction = { playerId, action: 'play', card }
       this.broadcastPersonalized()
@@ -426,6 +432,7 @@ export class UnoTableDO extends DurableObject<Env> {
 
     if (stackedSameNumber) {
       this.mayPassAfterNumberStack = true
+      this.stackChainRank = card.value!
       this.broadcastPersonalized()
       return
     }
@@ -450,6 +457,7 @@ export class UnoTableDO extends DurableObject<Env> {
       this.pendingDraw = 0
       this.pendingDrawType = null
       this.mayPassAfterNumberStack = false
+      this.stackChainRank = null
       this.lastAction = { playerId, action: `draw_${count}` }
 
       const p = this.players.find((x) => x.id === playerId)
@@ -476,6 +484,7 @@ export class UnoTableDO extends DurableObject<Env> {
     this.hasDrawnThisTurn = true
     if (this.canPlay(card)) this.blockedDrawAfterPlayableFromPile = true
     this.mayPassAfterNumberStack = false
+    this.stackChainRank = null
 
     const p = this.players.find((x) => x.id === playerId)
     if (p) { p.hasCalledUno = false; p.canBeChallenged = false }
@@ -554,10 +563,10 @@ export class UnoTableDO extends DurableObject<Env> {
 
     const top = this.discardPile[this.discardPile.length - 1]
 
-    /** After playing a same-rank number stack, only more of that rank (or wild) — not same-color junk. */
-    if (this.mayPassAfterNumberStack && top && top.type === 'number') {
+    /** Mid stack: only the rank from the card you played (stackChainRank), plus wilds. */
+    if (this.mayPassAfterNumberStack && this.stackChainRank != null) {
       if (card.type === 'wild' || card.type === 'wild_draw_four') return true
-      return this.sameRankNumbers(card, top)
+      return card.type === 'number' && card.value === this.stackChainRank
     }
 
     if (card.type === 'wild' || card.type === 'wild_draw_four') return true
@@ -688,6 +697,7 @@ export class UnoTableDO extends DurableObject<Env> {
       hasDrawnThisTurn: isCurrent ? this.hasDrawnThisTurn : false,
       cannotDrawMoreFromPile: isCurrent ? this.blockedDrawAfterPlayableFromPile : false,
       canPassAfterNumberStack: isCurrent ? this.mayPassAfterNumberStack : false,
+      numberStackRank: this.stackChainRank,
       pendingDraw: this.pendingDraw,
       pendingDrawType: this.pendingDrawType,
       lastAction: this.lastAction,

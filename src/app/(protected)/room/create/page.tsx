@@ -42,14 +42,14 @@ function CreateRoomContent() {
   const [startingChips, setStartingChips] = useState('10000')
   const [minimumBet, setMinimumBet] = useState(initialGame === 'poker' ? '100' : '50')
   const [cardsPerPlayer, setCardsPerPlayer] = useState('7')
-  const [winsToWin, setWinsToWin] = useState('5')
+  const [winsToWin, setWinsToWin] = useState('1')
   const [deckCount, setDeckCount] = useState(initialGame === 'blackjack' ? '6' : '1')
 
   function selectGame(type: GameType) {
     setGameType(type)
     if (type === 'blackjack') { setMaxPlayers('5'); setMinimumBet('50'); setStartingChips('10000'); setDeckCount('6') }
     if (type === 'poker') { setMaxPlayers('6'); setMinimumBet('100'); setStartingChips('10000'); setDeckCount('1') }
-    if (type === 'uno') { setMaxPlayers('4'); setCardsPerPlayer('7'); setWinsToWin('5') }
+    if (type === 'uno') { setMaxPlayers('4'); setCardsPerPlayer('7'); setWinsToWin('1') }
     if (type === 'hot-potato') { setMaxPlayers('8') }
   }
   const [creating, setCreating] = useState(false)
@@ -83,7 +83,7 @@ function CreateRoomContent() {
         settings.minimumBet = parseInt(minimumBet)
       } else if (gameType === 'uno') {
         settings.cardsPerPlayer = parseInt(cardsPerPlayer)
-        settings.winsToWin = Math.max(1, Math.min(50, parseInt(winsToWin) || 5))
+        settings.winsToWin = Math.max(1, Math.min(50, parseInt(winsToWin) || 1))
       } else if (gameType === 'hot-potato') {
         settings.startingChips = 0
       }
