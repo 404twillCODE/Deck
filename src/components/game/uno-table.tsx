@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useGameStore } from '@/stores/game-store'
 import { useAuthStore } from '@/stores/auth-store'
@@ -135,6 +135,24 @@ function UnoCardView({ card, onClick, disabled, small, faceDown }: {
   )
 }
 
+/** All players in turn order starting with the local user (then following play direction). */
+function orderPlayersFromSelf(
+  players: UnoState['players'],
+  myId: string | undefined,
+  direction: 1 | -1,
+): UnoState['players'] {
+  if (!players.length || !myId) return players
+  const idx = players.findIndex((p) => p.id === myId)
+  if (idx < 0) return players
+  const n = players.length
+  const out: UnoState['players'] = []
+  for (let k = 0; k < n; k++) {
+    const i = direction === 1 ? (idx + k) % n : ((idx - k) % n + n) % n
+    out.push(players[i])
+  }
+  return out
+}
+
 function ColorChooser({ onChoose }: { onChoose: (color: UnoColor) => void }) {
   const options: { color: UnoColor; bg: string; label: string }[] = [
     { color: 'red', bg: 'bg-red-500 hover:bg-red-400', label: 'Red' },
@@ -233,13 +251,21 @@ export function UnoTable({ wsRef }: UnoTableProps) {
     setChoosingColor(null)
   }
 
+  const playersInTableOrder = useMemo(() => {
+    if (!gameState) return []
+    return orderPlayersFromSelf(gameState.players, user?.id, gameState.direction)
+  }, [gameState, user?.id])
+
   if (!gameState) return null
 
-  const otherPlayers = gameState.players.filter((p) => p.id !== user?.id)
   const hasPending = gameState.pendingDraw > 0
-  // After drawing until you have a match, you must play — no more draws; end turn only if you still have nothing playable.
-  const canEndTurn = isMyTurn && gameState.hasDrawnThisTurn && !hasPending && !hasPlayableInHand
-  const canDraw = isMyTurn && (hasPending || !hasPlayableInHand)
+  const cannotDrawMoreFromPile = gameState.cannotDrawMoreFromPile === true
+  const canPassStack = gameState.canPassAfterNumberStack === true
+  const canEndTurn =
+    isMyTurn &&
+    !hasPending &&
+    ((gameState.hasDrawnThisTurn && !hasPlayableInHand) || (canPassStack && hasPlayableInHand))
+  const canDraw = isMyTurn && (hasPending || !cannotDrawMoreFromPile)
   const drawLabel = hasPending ? `Draw ${gameState.pendingDraw}` : 'Draw'
 
   return (
@@ -267,20 +293,24 @@ export function UnoTable({ wsRef }: UnoTableProps) {
         </div>
       </header>
 
-      <div className="flex-1 flex flex-col p-4 max-w-5xl mx-auto w-full">
-        {/* Opponents */}
-        <div className="flex flex-wrap justify-center gap-3 mb-6">
-          {otherPlayers.map((p) => {
+      <div className="flex-1 flex flex-col min-h-0 p-4 max-w-5xl mx-auto w-full">
+        {/* Players in turn order (you first) */}
+        <div className="flex flex-wrap justify-center gap-3 mb-4 shrink-0">
+          {playersInTableOrder.map((p) => {
             const isTurn = gameState.players[gameState.currentPlayerIndex]?.id === p.id
+            const isMe = p.id === user?.id
             return (
               <div
                 key={p.id}
                 className={cn(
                   'glass rounded-xl px-4 py-3 text-center relative min-w-[100px] transition-all',
                   isTurn && 'ring-2 ring-accent-light',
+                  isMe && !isTurn && 'ring-1 ring-white/15',
                 )}
               >
-                <p className="text-sm font-medium text-text-primary">{p.displayName}</p>
+                <p className="text-sm font-medium text-text-primary">
+                  {isMe ? 'You' : p.displayName}
+                </p>
                 <p className="text-xs text-text-secondary">{p.cardCount} card{p.cardCount !== 1 ? 's' : ''}</p>
                 {p.hasCalledUno && p.cardCount === 1 && (
                   <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-lg animate-pulse">
@@ -323,47 +353,80 @@ export function UnoTable({ wsRef }: UnoTableProps) {
           )}
         </AnimatePresence>
 
-        {/* Center: draw + discard */}
-        <div className="flex-1 flex items-center justify-center gap-8 mb-6">
-          <div className="flex flex-col items-center gap-2">
-            <motion.button
-              onClick={() => wsRef.current?.send({ type: 'uno_draw' })}
-              disabled={!canDraw}
-              className={cn(
-                'relative',
-                canDraw ? 'cursor-pointer' : 'opacity-50 cursor-not-allowed',
+        {/* Draw pile + discard + turn actions (grouped; no flex-1 gap that hides the table) */}
+        <div className="flex flex-col items-center gap-4 mb-4 shrink-0">
+          <div className="flex items-end justify-center gap-8 sm:gap-12">
+            <div className="flex flex-col items-center gap-2">
+              <motion.button
+                type="button"
+                onClick={() => wsRef.current?.send({ type: 'uno_draw' })}
+                disabled={!canDraw}
+                className={cn(
+                  'relative',
+                  canDraw ? 'cursor-pointer' : 'opacity-50 cursor-not-allowed',
+                )}
+                whileHover={canDraw ? { scale: 1.05 } : {}}
+                whileTap={canDraw ? { scale: 0.95 } : {}}
+              >
+                <UnoCardView
+                  card={{ id: 'draw', color: null, type: 'wild', value: undefined }}
+                  disabled
+                  faceDown
+                />
+                <span className="absolute bottom-1 left-1/2 -translate-x-1/2 text-[10px] text-white/40">
+                  {gameState.drawPileCount}
+                </span>
+              </motion.button>
+              <span
+                className={cn(
+                  'text-xs font-semibold px-3 py-1 rounded-full min-h-[1.75rem] inline-flex items-center',
+                  !isMyTurn && 'opacity-40',
+                  hasPending ? 'bg-red-500/20 text-red-400' : 'bg-white/[0.06] text-text-tertiary',
+                )}
+              >
+                {isMyTurn ? drawLabel : 'Draw pile'}
+              </span>
+            </div>
+
+            <div className="relative flex flex-col items-center gap-2">
+              <span className="text-[10px] uppercase tracking-wider text-text-tertiary font-semibold">Discard</span>
+              {gameState.discardTop ? (
+                <UnoCardView card={gameState.discardTop} disabled />
+              ) : (
+                <div className="w-[62px] sm:w-[72px] h-[90px] sm:h-[104px] rounded-xl border border-dashed border-white/10 bg-white/[0.02]" />
               )}
-              whileHover={canDraw ? { scale: 1.05 } : {}}
-              whileTap={canDraw ? { scale: 0.95 } : {}}
-            >
-              <UnoCardView
-                card={{ id: 'draw', color: null, type: 'wild', value: undefined }}
-                disabled
-                faceDown
+              <div
+                className={cn(
+                  'w-6 h-6 rounded-full border-2 border-[#0a0a14] shadow-lg',
+                  UNO_COLORS[gameState.currentColor]?.bg,
+                )}
               />
-              <span className="absolute bottom-1 left-1/2 -translate-x-1/2 text-[10px] text-white/40">
-                {gameState.drawPileCount}
-              </span>
-            </motion.button>
-            {isMyTurn && (
-              <span className={cn(
-                'text-xs font-semibold px-3 py-1 rounded-full',
-                hasPending ? 'bg-red-500/20 text-red-400' : 'bg-white/[0.06] text-text-tertiary',
-              )}>
-                {drawLabel}
-              </span>
-            )}
+            </div>
           </div>
 
-          <div className="relative">
-            {gameState.discardTop && <UnoCardView card={gameState.discardTop} disabled />}
-            <div
-              className={cn(
-                'absolute -bottom-3 left-1/2 -translate-x-1/2 w-6 h-6 rounded-full border-2 border-[#0a0a14] shadow-lg',
-                UNO_COLORS[gameState.currentColor]?.bg,
+          {isMyTurn && (
+            <motion.div
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="w-full max-w-md flex flex-wrap items-center justify-center gap-2 px-4 py-3 rounded-2xl glass border border-white/[0.06]"
+            >
+              <span className="text-xs font-semibold text-accent-light">Your turn</span>
+              {myPlayer && myCards.length > 0 && myCards.length <= 2 && !myPlayer.hasCalledUno && (
+                <button
+                  type="button"
+                  onClick={() => wsRef.current?.send({ type: 'uno_call_uno' })}
+                  className="px-4 py-2 rounded-full bg-red-500 text-white text-xs font-bold hover:bg-red-400 transition-colors shadow-lg"
+                >
+                  UNO!
+                </button>
               )}
-            />
-          </div>
+              {canEndTurn && (
+                <AnimatedButton size="sm" variant="secondary" onClick={() => wsRef.current?.send({ type: 'uno_pass' })}>
+                  {canPassStack ? 'Done stacking' : 'End turn'}
+                </AnimatedButton>
+              )}
+            </motion.div>
+          )}
         </div>
 
         {/* Win overlay */}
@@ -388,30 +451,18 @@ export function UnoTable({ wsRef }: UnoTableProps) {
           )}
         </AnimatePresence>
 
-        {/* My hand */}
-        <div className="pb-4">
-          <div className="flex items-center gap-3 mb-3 flex-wrap">
+        {/* My hand — cards only; actions live under the piles */}
+        <div className="flex-1 flex flex-col min-h-0 justify-end pb-4 pt-2">
+          <div className="flex items-baseline justify-between gap-3 mb-3 px-1 shrink-0">
             <p className="text-sm font-medium text-text-secondary">
-              Your Hand ({myCards.length})
-              {isMyTurn && <span className="ml-2 text-accent-light text-xs font-semibold animate-pulse">Your turn!</span>}
+              Your hand · {myCards.length} {myCards.length === 1 ? 'card' : 'cards'}
             </p>
-            {myPlayer && myCards.length <= 2 && myCards.length > 0 && !myPlayer.hasCalledUno && (
-              <button
-                onClick={() => wsRef.current?.send({ type: 'uno_call_uno' })}
-                className="px-4 py-1.5 rounded-full bg-red-500 text-white text-xs font-bold hover:bg-red-400 transition-colors shadow-lg animate-bounce"
-              >
-                UNO!
-              </button>
+            {myPlayer != null && (
+              <span className="text-xs text-text-tertiary tabular-nums">{myPlayer.score} pts</span>
             )}
-            {canEndTurn && (
-              <AnimatedButton size="sm" variant="secondary" onClick={() => wsRef.current?.send({ type: 'uno_pass' })}>
-                End Turn
-              </AnimatedButton>
-            )}
-            {myPlayer?.score ? <span className="text-xs text-text-tertiary ml-auto">{myPlayer.score} pts</span> : null}
           </div>
 
-          <div className="flex gap-1 sm:gap-1.5 overflow-x-auto pb-2 justify-center flex-wrap">
+          <div className="flex gap-1 sm:gap-1.5 overflow-x-auto pb-2 justify-center flex-nowrap min-h-[100px] items-end">
             <AnimatePresence mode="popLayout">
               {myCards.map((card) => (
                 <motion.div

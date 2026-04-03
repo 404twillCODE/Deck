@@ -43,6 +43,10 @@ export class UnoTableDO extends DurableObject<Env> {
   private currentColor: UnoColor = 'red'
   private phase: 'waiting' | 'playing' | 'complete' = 'waiting'
   private hasDrawnThisTurn = false
+  /** After drawing a playable card from the pile this turn, no more optional draws until turn ends. */
+  private blockedDrawAfterPlayableFromPile = false
+  /** After playing a number on a matching number, you may end the turn while still holding playable cards. */
+  private mayPassAfterNumberStack = false
   private pendingDraw = 0
   private pendingDrawType: 'draw_two' | 'wild_draw_four' | null = null
   private lastAction: { playerId: string; action: string; card?: UnoCard } | null = null
@@ -288,6 +292,8 @@ export class UnoTableDO extends DurableObject<Env> {
     this.playerHands.clear()
     this.direction = 1
     this.hasDrawnThisTurn = false
+    this.blockedDrawAfterPlayableFromPile = false
+    this.mayPassAfterNumberStack = false
     this.pendingDraw = 0
     this.pendingDrawType = null
     this.lastAction = null
@@ -338,6 +344,8 @@ export class UnoTableDO extends DurableObject<Env> {
 
   private resetTurnState() {
     this.hasDrawnThisTurn = false
+    this.blockedDrawAfterPlayableFromPile = false
+    this.mayPassAfterNumberStack = false
   }
 
   private advanceToNext() {
@@ -368,6 +376,9 @@ export class UnoTableDO extends DurableObject<Env> {
     const validColors: UnoColor[] = ['red', 'yellow', 'green', 'blue']
     if (chosenColor && !validColors.includes(chosenColor as UnoColor)) return
 
+    const topBefore =
+      this.discardPile.length > 0 ? this.discardPile[this.discardPile.length - 1]! : null
+
     hand.splice(idx, 1)
 
     if ((card.type === 'wild' || card.type === 'wild_draw_four') && chosenColor) {
@@ -393,6 +404,7 @@ export class UnoTableDO extends DurableObject<Env> {
       this.phase = 'complete'
       this.pendingDraw = 0
       this.pendingDrawType = null
+      this.blockedDrawAfterPlayableFromPile = false
       this.calculateScores(playerId)
       this.lastAction = { playerId, action: 'play', card }
       this.broadcastPersonalized()
@@ -404,6 +416,19 @@ export class UnoTableDO extends DurableObject<Env> {
 
     this.lastAction = { playerId, action: 'play', card }
     this.clearChallengeExcept(playerId)
+
+    const stackedSameNumber =
+      card.type === 'number' &&
+      topBefore != null &&
+      topBefore.type === 'number' &&
+      card.value === topBefore.value
+
+    if (stackedSameNumber) {
+      this.mayPassAfterNumberStack = true
+      this.broadcastPersonalized()
+      return
+    }
+
     this.applyEffect(card)
   }
 
@@ -423,6 +448,7 @@ export class UnoTableDO extends DurableObject<Env> {
       const count = this.pendingDraw
       this.pendingDraw = 0
       this.pendingDrawType = null
+      this.mayPassAfterNumberStack = false
       this.lastAction = { playerId, action: `draw_${count}` }
 
       const p = this.players.find((x) => x.id === playerId)
@@ -433,8 +459,8 @@ export class UnoTableDO extends DurableObject<Env> {
       return
     }
 
-    // If you can play a card, you cannot draw — you must play (or end turn only when still nothing matches after drawing).
-    if (this.handHasPlayable(hand)) return
+    // Optional draw from pile: allowed even with playable cards in hand; further draws stop once a drawn card is playable.
+    if (this.blockedDrawAfterPlayableFromPile) return
 
     // Normal draw — draw one card, stay on turn
     const card = this.drawCardFromPile()
@@ -447,6 +473,8 @@ export class UnoTableDO extends DurableObject<Env> {
 
     hand.push(card)
     this.hasDrawnThisTurn = true
+    if (this.canPlay(card)) this.blockedDrawAfterPlayableFromPile = true
+    this.mayPassAfterNumberStack = false
 
     const p = this.players.find((x) => x.id === playerId)
     if (p) { p.hasCalledUno = false; p.canBeChallenged = false }
@@ -461,10 +489,18 @@ export class UnoTableDO extends DurableObject<Env> {
     if (active.length === 0) return
     const current = active[this.currentPlayerIndex]
     if (!current || current.id !== playerId) return
-    if (!this.hasDrawnThisTurn) return
     if (this.pendingDraw > 0) return
 
     const hand = this.playerHands.get(playerId)
+
+    if (this.mayPassAfterNumberStack && hand && this.handHasPlayable(hand)) {
+      this.lastAction = { playerId, action: 'end_turn' }
+      this.advanceToNext()
+      this.broadcastPersonalized()
+      return
+    }
+
+    if (!this.hasDrawnThisTurn) return
     if (hand && this.handHasPlayable(hand)) return
 
     this.lastAction = { playerId, action: 'end_turn' }
@@ -619,6 +655,8 @@ export class UnoTableDO extends DurableObject<Env> {
       currentColor: this.currentColor,
       drawPileCount: this.drawPile.length,
       hasDrawnThisTurn: isCurrent ? this.hasDrawnThisTurn : false,
+      cannotDrawMoreFromPile: isCurrent ? this.blockedDrawAfterPlayableFromPile : false,
+      canPassAfterNumberStack: isCurrent ? this.mayPassAfterNumberStack : false,
       pendingDraw: this.pendingDraw,
       pendingDrawType: this.pendingDrawType,
       lastAction: this.lastAction,

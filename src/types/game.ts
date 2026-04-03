@@ -37,6 +37,10 @@ export interface UnoState {
   currentColor: UnoColor
   drawPileCount: number
   hasDrawnThisTurn: boolean
+  /** True when you drew a playable card from the pile this turn; optional draws from the pile are blocked. */
+  cannotDrawMoreFromPile: boolean
+  /** After stacking same-number cards, use End turn to stop even if you could play more. */
+  canPassAfterNumberStack: boolean
   pendingDraw: number
   pendingDrawType: 'draw_two' | 'wild_draw_four' | null
   lastAction: { playerId: string; action: string; card?: UnoCard } | null

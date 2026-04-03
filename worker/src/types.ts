@@ -25,6 +25,10 @@ export interface UnoState {
   currentColor: UnoColor
   drawPileCount: number
   hasDrawnThisTurn: boolean
+  /** True for the active player after they drew a playable card from the pile this turn (no more pile draws until turn ends). */
+  cannotDrawMoreFromPile: boolean
+  /** You may end your turn after a same-number stack while still holding playable cards. */
+  canPassAfterNumberStack: boolean
   pendingDraw: number
   pendingDrawType: 'draw_two' | 'wild_draw_four' | null
   lastAction: { playerId: string; action: string; card?: UnoCard } | null
