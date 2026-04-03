@@ -11,7 +11,7 @@ interface UnoCard {
 }
 
 interface UnoPlayerInternal extends Player {
-  score: number
+  wins: number
   hasCalledUno: boolean
   canBeChallenged: boolean
 }
@@ -31,7 +31,7 @@ export class UnoTableDO extends DurableObject<Env> {
   private connections: Map<string, Connection> = new Map()
   private roomCode = ''
   private hostId = ''
-  private settings: TableSettings = { gameType: 'uno', maxPlayers: 10, startingChips: 0, minimumBet: 0 }
+  private settings: TableSettings = { gameType: 'uno', maxPlayers: 10, startingChips: 0, minimumBet: 0, winsToWin: 5 }
   private players: UnoPlayerInternal[] = []
   private isStarted = false
 
@@ -52,6 +52,7 @@ export class UnoTableDO extends DurableObject<Env> {
   private lastAction: { playerId: string; action: string; card?: UnoCard } | null = null
   private winnerId: string | null = null
   private roundNumber = 0
+  private matchComplete = false
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url)
@@ -156,7 +157,7 @@ export class UnoTableDO extends DurableObject<Env> {
           this.phase = 'complete'
           if (active.length === 1) {
             this.winnerId = active[0].id
-            this.calculateScores(active[0].id)
+            this.awardRoundWin(active[0].id)
           }
           this.broadcastPersonalized()
           return
@@ -189,7 +190,7 @@ export class UnoTableDO extends DurableObject<Env> {
         id: playerId, username: displayName, displayName, chips: 0,
         isHost: playerId === this.hostId || this.players.length === 0,
         isReady: false, isConnected: true, seatIndex: this.players.length,
-        score: 0, hasCalledUno: false, canBeChallenged: false,
+        wins: 0, hasCalledUno: false, canBeChallenged: false,
       }
       this.players.push(unoPlayer)
       if (this.players.length === 1) this.hostId = playerId
@@ -298,6 +299,7 @@ export class UnoTableDO extends DurableObject<Env> {
     this.pendingDrawType = null
     this.lastAction = null
     this.winnerId = null
+    this.matchComplete = false
     this.roundNumber++
 
     for (const p of this.players) {
@@ -308,7 +310,8 @@ export class UnoTableDO extends DurableObject<Env> {
     const active = this.getActive()
     if (active.length < 2) return
 
-    for (const p of active) this.playerHands.set(p.id, this.drawCards(7))
+    const handSize = Math.min(10, Math.max(1, this.settings.cardsPerPlayer ?? 7))
+    for (const p of active) this.playerHands.set(p.id, this.drawCards(handSize))
 
     let startCard = this.drawPile.pop()!
     while (startCard.type === 'wild_draw_four') {
@@ -405,12 +408,13 @@ export class UnoTableDO extends DurableObject<Env> {
       this.pendingDraw = 0
       this.pendingDrawType = null
       this.blockedDrawAfterPlayableFromPile = false
-      this.calculateScores(playerId)
+      this.awardRoundWin(playerId)
+      const winner = this.players.find((p) => p.id === playerId)
+      const target = Math.max(1, this.settings.winsToWin ?? 5)
+      this.matchComplete = winner != null && winner.wins >= target
       this.lastAction = { playerId, action: 'play', card }
       this.broadcastPersonalized()
-      setTimeout(() => {
-        if (this.players.filter((p) => p.isConnected).length >= 2) this.startRound()
-      }, 8000)
+      this.scheduleNextRoundOrMatch()
       return
     }
 
@@ -418,10 +422,7 @@ export class UnoTableDO extends DurableObject<Env> {
     this.clearChallengeExcept(playerId)
 
     const stackedSameNumber =
-      card.type === 'number' &&
-      topBefore != null &&
-      topBefore.type === 'number' &&
-      card.value === topBefore.value
+      topBefore != null && this.sameRankNumbers(card, topBefore)
 
     if (stackedSameNumber) {
       this.mayPassAfterNumberStack = true
@@ -493,7 +494,7 @@ export class UnoTableDO extends DurableObject<Env> {
 
     const hand = this.playerHands.get(playerId)
 
-    if (this.mayPassAfterNumberStack && hand && this.handHasPlayable(hand)) {
+    if (this.mayPassAfterNumberStack) {
       this.lastAction = { playerId, action: 'end_turn' }
       this.advanceToNext()
       this.broadcastPersonalized()
@@ -533,16 +534,42 @@ export class UnoTableDO extends DurableObject<Env> {
 
   // ─── Card Rules ─────────────────────────────────────
 
+  /** Same rank, any color — house rule for number stacking. */
+  private sameRankNumbers(a: UnoCard, b: UnoCard): boolean {
+    if (a.type !== 'number' || b.type !== 'number') return false
+    if (a.value === undefined || b.value === undefined) return false
+    return a.value === b.value
+  }
+
+  /** Color shown on the discard for matching: wild uses chosen color; else the card's face color. */
+  private effectiveTopColor(top: UnoCard): UnoColor | null {
+    if (top.type === 'wild' || top.type === 'wild_draw_four') return this.currentColor
+    return top.color
+  }
+
   private canPlay(card: UnoCard): boolean {
     // During a pending draw stack: +2 stacks on +2, +4 stacks on +4, +4 can stack on +2, +2 can stack on +4
     if (this.pendingDrawType === 'draw_two') return card.type === 'draw_two' || card.type === 'wild_draw_four'
     if (this.pendingDrawType === 'wild_draw_four') return card.type === 'wild_draw_four' || card.type === 'draw_two'
 
-    if (card.type === 'wild' || card.type === 'wild_draw_four') return true
     const top = this.discardPile[this.discardPile.length - 1]
+
+    /** After playing a same-rank number stack, only more of that rank (or wild) — not same-color junk. */
+    if (this.mayPassAfterNumberStack && top && top.type === 'number') {
+      if (card.type === 'wild' || card.type === 'wild_draw_four') return true
+      return this.sameRankNumbers(card, top)
+    }
+
+    if (card.type === 'wild' || card.type === 'wild_draw_four') return true
     if (!top) return true
-    if (card.color === this.currentColor) return true
-    if (card.type === 'number' && top.type === 'number' && card.value === top.value) return true
+
+    // Numbers: same rank on any colored number discard (color-independent stacking)
+    if (this.sameRankNumbers(card, top)) return true
+
+    const topColor = this.effectiveTopColor(top)
+    if (card.color && topColor && card.color === topColor) return true
+
+    // Action cards: same symbol, any color (house rule)
     if (card.type !== 'number' && card.type === top.type) return true
     return false
   }
@@ -612,18 +639,22 @@ export class UnoTableDO extends DurableObject<Env> {
     }
   }
 
-  private calculateScores(winnerId: string) {
-    let total = 0
-    for (const [pid, hand] of this.playerHands) {
-      if (pid === winnerId) continue
-      for (const c of hand) {
-        if (c.type === 'number') total += c.value || 0
-        else if (c.type === 'skip' || c.type === 'reverse' || c.type === 'draw_two') total += 20
-        else total += 50
-      }
-    }
+  private awardRoundWin(winnerId: string) {
     const winner = this.players.find((p) => p.id === winnerId)
-    if (winner) winner.score += total
+    if (winner) winner.wins += 1
+  }
+
+  private scheduleNextRoundOrMatch() {
+    const delayMs = this.matchComplete ? 12000 : 8000
+    setTimeout(() => {
+      if (this.matchComplete) {
+        this.matchComplete = false
+        for (const p of this.players) p.wins = 0
+      }
+      if (this.players.filter((p) => p.isConnected).length >= 2) {
+        this.startRound()
+      }
+    }, delayMs)
   }
 
   // ─── State Broadcasting ─────────────────────────────
@@ -645,7 +676,7 @@ export class UnoTableDO extends DurableObject<Env> {
         seatIndex: p.seatIndex,
         cards: p.id === viewingId ? (this.playerHands.get(p.id) || []) : [],
         cardCount: (this.playerHands.get(p.id) || []).length,
-        score: p.score,
+        wins: p.wins,
         hasCalledUno: p.hasCalledUno,
         canBeChallenged: p.canBeChallenged,
       })),
@@ -662,6 +693,7 @@ export class UnoTableDO extends DurableObject<Env> {
       lastAction: this.lastAction,
       winnerId: this.winnerId,
       roundNumber: this.roundNumber,
+      matchComplete: this.matchComplete,
     }
   }
 

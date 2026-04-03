@@ -16,7 +16,7 @@ export interface UnoState {
   players: {
     id: string; displayName: string; username: string; chips: number
     isHost: boolean; isReady: boolean; isConnected: boolean; seatIndex: number
-    cards: UnoCard[]; cardCount: number; score: number
+    cards: UnoCard[]; cardCount: number; wins: number
     hasCalledUno: boolean; canBeChallenged: boolean
   }[]
   currentPlayerIndex: number
@@ -34,6 +34,8 @@ export interface UnoState {
   lastAction: { playerId: string; action: string; card?: UnoCard } | null
   winnerId: string | null
   roundNumber: number
+  /** True when someone just reached winsToWin; UI can show match over before the next match. */
+  matchComplete: boolean
 }
 
 export interface Card {
@@ -58,6 +60,10 @@ export interface TableSettings {
   maxPlayers: number
   startingChips: number
   minimumBet: number
+  /** Uno: hand size at deal (default 7). */
+  cardsPerPlayer?: number
+  /** Uno: round wins needed to take the match; then wins reset and a new match starts. */
+  winsToWin?: number
 }
 
 export interface BlackjackHand {

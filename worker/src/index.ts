@@ -83,6 +83,8 @@ export default {
         maxPlayers?: number
         startingChips?: number
         minimumBet?: number
+        cardsPerPlayer?: number
+        winsToWin?: number
       }
 
       try {
@@ -104,18 +106,27 @@ export default {
 
         const defaultMax = body.gameType === 'poker' ? 6 : body.gameType === 'hot-potato' ? 8 : 5
 
+        const baseSettings = {
+          gameType: body.gameType,
+          maxPlayers: body.maxPlayers || defaultMax,
+          startingChips: body.startingChips || (body.gameType === 'hot-potato' ? 0 : 10000),
+          minimumBet: body.minimumBet || (body.gameType === 'poker' ? 100 : 50),
+        }
+        const unoExtras =
+          body.gameType === 'uno'
+            ? {
+                ...(typeof body.cardsPerPlayer === 'number' && { cardsPerPlayer: body.cardsPerPlayer }),
+                ...(typeof body.winsToWin === 'number' && { winsToWin: body.winsToWin }),
+              }
+            : {}
+
         const initResponse = await stub.fetch(new Request('https://internal/init', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             code: body.code,
             hostId,
-            settings: {
-              gameType: body.gameType,
-              maxPlayers: body.maxPlayers || defaultMax,
-              startingChips: body.startingChips || (body.gameType === 'hot-potato' ? 0 : 10000),
-              minimumBet: body.minimumBet || (body.gameType === 'poker' ? 100 : 50),
-            },
+            settings: { ...baseSettings, ...unoExtras },
           }),
         }))
 

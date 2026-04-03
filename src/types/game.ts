@@ -23,7 +23,8 @@ export interface UnoPlayerView {
   seatIndex: number
   cards: UnoCard[]
   cardCount: number
-  score: number
+  /** Round wins this match (resets after someone wins the match). */
+  wins: number
   hasCalledUno: boolean
   canBeChallenged: boolean
 }
@@ -46,6 +47,7 @@ export interface UnoState {
   lastAction: { playerId: string; action: string; card?: UnoCard } | null
   winnerId: string | null
   roundNumber: number
+  matchComplete: boolean
 }
 
 export interface Card {
@@ -156,4 +158,6 @@ export interface TableSettings {
   startingChips: number
   minimumBet: number
   isPrivate: boolean
+  cardsPerPlayer?: number
+  winsToWin?: number
 }
