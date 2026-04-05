@@ -17,6 +17,15 @@ export function getGameStatLabels(gameType: 'all' | GameType) {
     }
   }
 
+  if (gameType === 'roulette') {
+    return {
+      playedLabel: 'Spins',
+      wonLabel: 'Spins Won',
+      playedNoun: 'spin',
+      wonNoun: 'spin win',
+    }
+  }
+
   return {
     playedLabel: 'Games',
     wonLabel: 'Wins',

@@ -1,6 +1,6 @@
 export type Suit = 'hearts' | 'diamonds' | 'clubs' | 'spades'
 export type Rank = '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | 'J' | 'Q' | 'K' | 'A'
-export type GameType = 'blackjack' | 'poker' | 'uno' | 'hot-potato'
+export type GameType = 'blackjack' | 'poker' | 'uno' | 'hot-potato' | 'roulette'
 
 export type UnoColor = 'red' | 'yellow' | 'green' | 'blue'
 export type UnoCardType = 'number' | 'skip' | 'reverse' | 'draw_two' | 'wild' | 'wild_draw_four'
@@ -152,6 +152,34 @@ export interface HotPotatoState {
   passCount: number
   roundStartedAt: number
   lastEliminatedId: string | null
+}
+
+export type RouletteBetType =
+  | 'straight' | 'split' | 'street' | 'corner' | 'six_line'
+  | 'basket' | 'dozen' | 'column'
+  | 'red' | 'black' | 'even' | 'odd' | 'low' | 'high'
+
+export interface RouletteBetDef {
+  type: RouletteBetType
+  numbers: number[]
+  amount: number
+}
+
+export interface RoulettePlayer extends Player {
+  bets: RouletteBetDef[]
+  totalBet: number
+  winnings: number
+  result?: 'win' | 'lose' | 'mixed' | 'none'
+}
+
+export interface RouletteState {
+  phase: 'waiting' | 'betting' | 'no_more_bets' | 'spinning' | 'resolved' | 'complete'
+  players: RoulettePlayer[]
+  winningNumber: number | null
+  previousResults: number[]
+  roundNumber: number
+  minimumBet: number
+  bettingEndsAt: number | null
 }
 
 export interface TableSettings {

@@ -4,6 +4,7 @@ export { BlackjackTableDO } from './durable-objects/blackjack-table'
 export { PokerTableDO } from './durable-objects/poker-table'
 export { UnoTableDO } from './durable-objects/uno-table'
 export { HotPotatoTableDO } from './durable-objects/hot-potato-table'
+export { RouletteTableDO } from './durable-objects/roulette-table'
 
 const ALLOWED_ORIGINS = new Set([
   'https://deck-mu.vercel.app',
@@ -63,7 +64,7 @@ function withCors(request: Request, env: Env, response: Response): Response {
 
 // In-memory room registry (maps code → gameType). Survives within a single
 // isolate lifetime which is fine for dev; in production rooms are ephemeral anyway.
-const roomRegistry = new Map<string, 'blackjack' | 'poker' | 'uno' | 'hot-potato'>()
+const roomRegistry = new Map<string, 'blackjack' | 'poker' | 'uno' | 'hot-potato' | 'roulette'>()
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -78,7 +79,7 @@ export default {
     if (url.pathname === '/api/rooms' && request.method === 'POST') {
       let body: {
         code?: string
-        gameType?: 'blackjack' | 'poker' | 'uno' | 'hot-potato'
+        gameType?: 'blackjack' | 'poker' | 'uno' | 'hot-potato' | 'roulette'
         hostId?: string
         maxPlayers?: number
         startingChips?: number
@@ -101,11 +102,11 @@ export default {
       const hostId = body.hostId || 'pending'
 
       try {
-        const namespace = body.gameType === 'poker' ? env.POKER_TABLE : body.gameType === 'uno' ? env.UNO_TABLE : body.gameType === 'hot-potato' ? env.HOT_POTATO_TABLE : env.BLACKJACK_TABLE
+        const namespace = body.gameType === 'poker' ? env.POKER_TABLE : body.gameType === 'uno' ? env.UNO_TABLE : body.gameType === 'hot-potato' ? env.HOT_POTATO_TABLE : body.gameType === 'roulette' ? env.ROULETTE_TABLE : env.BLACKJACK_TABLE
         const id = namespace.idFromName(body.code)
         const stub = namespace.get(id)
 
-        const defaultMax = body.gameType === 'poker' ? 6 : body.gameType === 'hot-potato' ? 8 : 5
+        const defaultMax = body.gameType === 'poker' ? 6 : body.gameType === 'hot-potato' ? 8 : body.gameType === 'roulette' ? 8 : 5
 
         const baseSettings = {
           gameType: body.gameType,
@@ -163,8 +164,8 @@ export default {
       }
       // Room not in registry — could have been created in a different isolate.
       // Try both DOs by querying their /info endpoint.
-      for (const type of ['blackjack', 'poker', 'uno', 'hot-potato'] as const) {
-        const ns = type === 'poker' ? env.POKER_TABLE : type === 'uno' ? env.UNO_TABLE : type === 'hot-potato' ? env.HOT_POTATO_TABLE : env.BLACKJACK_TABLE
+      for (const type of ['blackjack', 'poker', 'uno', 'hot-potato', 'roulette'] as const) {
+        const ns = type === 'poker' ? env.POKER_TABLE : type === 'uno' ? env.UNO_TABLE : type === 'hot-potato' ? env.HOT_POTATO_TABLE : type === 'roulette' ? env.ROULETTE_TABLE : env.BLACKJACK_TABLE
         const id = ns.idFromName(code)
         const stub = ns.get(id)
         try {
@@ -196,8 +197,8 @@ export default {
 
       let gameType = roomRegistry.get(code)
       if (!gameType) {
-        for (const type of ['blackjack', 'poker', 'uno', 'hot-potato'] as const) {
-          const ns = type === 'poker' ? env.POKER_TABLE : type === 'uno' ? env.UNO_TABLE : type === 'hot-potato' ? env.HOT_POTATO_TABLE : env.BLACKJACK_TABLE
+        for (const type of ['blackjack', 'poker', 'uno', 'hot-potato', 'roulette'] as const) {
+          const ns = type === 'poker' ? env.POKER_TABLE : type === 'uno' ? env.UNO_TABLE : type === 'hot-potato' ? env.HOT_POTATO_TABLE : type === 'roulette' ? env.ROULETTE_TABLE : env.BLACKJACK_TABLE
           const id = ns.idFromName(code)
           const stub = ns.get(id)
           try {
@@ -219,7 +220,8 @@ export default {
         gameType === 'poker' ? env.POKER_TABLE
           : gameType === 'uno' ? env.UNO_TABLE
             : gameType === 'hot-potato' ? env.HOT_POTATO_TABLE
-              : env.BLACKJACK_TABLE
+              : gameType === 'roulette' ? env.ROULETTE_TABLE
+                : env.BLACKJACK_TABLE
 
       const id = namespace.idFromName(code)
       const stub = namespace.get(id)
@@ -259,9 +261,9 @@ export default {
 
       const roomCode = wsMatch[1].toUpperCase()
       const gameType = url.searchParams.get('game') || roomRegistry.get(roomCode) || 'blackjack'
-      roomRegistry.set(roomCode, gameType as 'blackjack' | 'poker' | 'uno' | 'hot-potato')
+      roomRegistry.set(roomCode, gameType as 'blackjack' | 'poker' | 'uno' | 'hot-potato' | 'roulette')
 
-      const namespace = gameType === 'poker' ? env.POKER_TABLE : gameType === 'uno' ? env.UNO_TABLE : gameType === 'hot-potato' ? env.HOT_POTATO_TABLE : env.BLACKJACK_TABLE
+      const namespace = gameType === 'poker' ? env.POKER_TABLE : gameType === 'uno' ? env.UNO_TABLE : gameType === 'hot-potato' ? env.HOT_POTATO_TABLE : gameType === 'roulette' ? env.ROULETTE_TABLE : env.BLACKJACK_TABLE
       const id = namespace.idFromName(roomCode)
       const stub = namespace.get(id)
 

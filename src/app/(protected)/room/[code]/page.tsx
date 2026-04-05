@@ -18,6 +18,7 @@ import { BlackjackTable } from '@/components/game/blackjack-table'
 import { PokerTable } from '@/components/game/poker-table'
 import { UnoTable } from '@/components/game/uno-table'
 import { HotPotatoTable } from '@/components/game/hot-potato-table'
+import { RouletteTable } from '@/components/game/roulette-table'
 import { ArrowLeft, Copy, Users, Play, Loader2, RefreshCw } from 'lucide-react'
 import Link from 'next/link'
 import { recordGameResult } from '@/lib/stats'
@@ -26,6 +27,7 @@ import type {
   GameType,
   HotPotatoState,
   PokerState,
+  RouletteState,
   RoomState,
   ServerMessage,
   UnoState,
@@ -64,24 +66,29 @@ function useStatsRecorder(isFreePlay: boolean) {
     } else if (gameType === 'hot-potato') {
       const hotPotatoState = gs as HotPotatoState
       won = hotPotatoState.winnerId === user.id
+    } else if (gameType === 'roulette') {
+      const rouletteState = gs as RouletteState
+      const rPlayer = rouletteState.players.find((p) => p.id === user.id)
+      if (!rPlayer) return
+      won = rPlayer.result === 'win' || rPlayer.result === 'mixed'
     }
 
     recordedRef.current = roundKey
     recordGameResult(user.id, gameType, won).catch(() => {})
 
-    // Persist bankroll changes for chip-based play.
-    // For free-play rooms we intentionally do NOT touch user chip balance.
     if (!isFreePlay) {
       const maybeFinalChips =
         gameType === 'blackjack'
           ? (gs as BlackjackState).players.find((p) => p.id === user.id)?.chips
           : gameType === 'poker'
             ? (gs as PokerState).players.find((p) => p.id === user.id)?.chips
-            : gameType === 'uno'
-              ? null
-              : gameType === 'hot-potato'
+            : gameType === 'roulette'
+              ? (gs as RouletteState).players.find((p) => p.id === user.id)?.chips
+              : gameType === 'uno'
                 ? null
-                : null
+                : gameType === 'hot-potato'
+                  ? null
+                  : null
 
       if (typeof maybeFinalChips === 'number') {
         const supabase = createClient()
@@ -271,6 +278,10 @@ function RoomContent() {
         case 'hp_state':
           updateGameState(message.payload)
           break
+        case 'rl_state':
+        case 'rl_round_result':
+          updateGameState(message.payload)
+          break
         case 'chips_reset':
           addToast({ type: 'info', title: 'Chips Reset', message: `Everyone is out of chips! All players reset to ${message.payload.startingChips.toLocaleString()} chips.` })
           break
@@ -316,7 +327,8 @@ function RoomContent() {
   }, [code, gameTypeParam, resolvedGameType])
 
   const isHost = roomState?.hostId === user?.id
-  const allReady = roomState?.players?.every((p) => p.isReady) && (roomState?.players?.length ?? 0) >= 2
+  const minPlayers = roomState?.gameType === 'roulette' ? 1 : 2
+  const allReady = roomState?.players?.every((p) => p.isReady) && (roomState?.players?.length ?? 0) >= minPlayers
 
   // Authoritative: follow the room's actual setting (so toggles update everyone).
   useEffect(() => {
@@ -335,7 +347,7 @@ function RoomContent() {
     if (!roomState || !user) return
     if (!isHost) return
     if (roomState.isStarted) return
-    if (roomState.gameType !== 'blackjack' && roomState.gameType !== 'poker') return
+    if (roomState.gameType !== 'blackjack' && roomState.gameType !== 'poker' && roomState.gameType !== 'roulette') return
 
     setFreePlayUpdating(true)
     try {
@@ -390,6 +402,7 @@ function RoomContent() {
         case 'bj_state': case 'bj_round_result': updateGameState(message.payload); break
         case 'pk_state': case 'pk_showdown': updateGameState(message.payload); break
         case 'uno_state': case 'hp_state': updateGameState(message.payload); break
+        case 'rl_state': case 'rl_round_result': updateGameState(message.payload); break
         case 'chips_reset':
           addToast({ type: 'info', title: 'Chips Reset', message: `Everyone reset to ${message.payload.startingChips.toLocaleString()} chips.` })
           break
@@ -449,6 +462,7 @@ function RoomContent() {
     if (roomState.gameType === 'poker') return <PokerTable wsRef={wsRef} />
     if (roomState.gameType === 'uno') return <UnoTable wsRef={wsRef} />
     if (roomState.gameType === 'hot-potato') return <HotPotatoTable wsRef={wsRef} />
+    if (roomState.gameType === 'roulette') return <RouletteTable wsRef={wsRef} />
   }
 
   return (
@@ -489,7 +503,9 @@ function RoomContent() {
                   ? 'Uno Table'
                   : (roomState?.gameType || gameTypeParam) === 'hot-potato'
                     ? 'Hot Potato'
-                    : 'Blackjack Table'}
+                    : (roomState?.gameType || gameTypeParam) === 'roulette'
+                      ? 'Roulette Table'
+                      : 'Blackjack Table'}
             </h1>
             <p className="text-text-secondary">
               Waiting for players... Share the room code to invite friends.
@@ -522,7 +538,7 @@ function RoomContent() {
               </h3>
             </div>
 
-            {isHost && !roomState?.isStarted && (roomState?.gameType === 'blackjack' || roomState?.gameType === 'poker') && (
+            {isHost && !roomState?.isStarted && (roomState?.gameType === 'blackjack' || roomState?.gameType === 'poker' || roomState?.gameType === 'roulette') && (
               <div className="mb-4 flex items-center justify-between p-4 rounded-xl glass border border-white/[0.06]">
                 <div className="flex flex-col">
                   <span className="text-sm font-medium text-text-primary">Free Play</span>

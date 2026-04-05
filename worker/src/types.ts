@@ -1,6 +1,6 @@
 export type Suit = 'hearts' | 'diamonds' | 'clubs' | 'spades'
 export type Rank = '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | 'J' | 'Q' | 'K' | 'A'
-export type GameType = 'blackjack' | 'poker' | 'uno' | 'hot-potato'
+export type GameType = 'blackjack' | 'poker' | 'uno' | 'hot-potato' | 'roulette'
 
 export type UnoColor = 'red' | 'yellow' | 'green' | 'blue'
 
@@ -142,6 +142,34 @@ export interface HotPotatoState {
   lastEliminatedId: string | null
 }
 
+export type RouletteBetType =
+  | 'straight' | 'split' | 'street' | 'corner' | 'six_line'
+  | 'basket' | 'dozen' | 'column'
+  | 'red' | 'black' | 'even' | 'odd' | 'low' | 'high'
+
+export interface RouletteBetDef {
+  type: RouletteBetType
+  numbers: number[]
+  amount: number
+}
+
+export interface RoulettePlayer extends Player {
+  bets: RouletteBetDef[]
+  totalBet: number
+  winnings: number
+  result?: 'win' | 'lose' | 'mixed' | 'none'
+}
+
+export interface RouletteState {
+  phase: 'waiting' | 'betting' | 'no_more_bets' | 'spinning' | 'resolved' | 'complete'
+  players: RoulettePlayer[]
+  winningNumber: number | null
+  previousResults: number[]
+  roundNumber: number
+  minimumBet: number
+  bettingEndsAt: number | null
+}
+
 export interface RoomState {
   roomId: string
   roomCode: string
@@ -151,7 +179,7 @@ export interface RoomState {
   maxPlayers: number
   isStarted: boolean
   settings: TableSettings
-  gameState?: BlackjackState | PokerState | UnoState | HotPotatoState
+  gameState?: BlackjackState | PokerState | UnoState | HotPotatoState | RouletteState
 }
 
 export type ClientMessage =
@@ -175,6 +203,9 @@ export type ClientMessage =
   | { type: 'uno_challenge_uno'; payload: { targetPlayerId: string } }
   | { type: 'uno_pass' }
   | { type: 'hp_pass' }
+  | { type: 'rl_place_bet'; payload: { bets: RouletteBetDef[] } }
+  | { type: 'rl_clear_bets' }
+  | { type: 'rl_confirm_bets' }
   | { type: 'ping' }
 
 export type ServerMessage =
@@ -191,6 +222,8 @@ export type ServerMessage =
   | { type: 'pk_winner'; payload: { playerId: string; amount: number; handRank: string; isSplit?: boolean; winnerIds?: string[] } }
   | { type: 'uno_state'; payload: UnoState }
   | { type: 'hp_state'; payload: HotPotatoState }
+  | { type: 'rl_state'; payload: RouletteState }
+  | { type: 'rl_round_result'; payload: RouletteState }
   | { type: 'chips_reset'; payload: { startingChips: number } }
   | { type: 'chat'; payload: { playerId: string; username: string; message: string; timestamp: number } }
   | { type: 'error'; payload: { message: string; code?: string } }
@@ -201,5 +234,6 @@ export interface Env {
   POKER_TABLE: DurableObjectNamespace
   UNO_TABLE: DurableObjectNamespace
   HOT_POTATO_TABLE: DurableObjectNamespace
+  ROULETTE_TABLE: DurableObjectNamespace
   ENVIRONMENT: string
 }

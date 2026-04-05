@@ -1,4 +1,4 @@
-import type { BlackjackState, PokerState, UnoState, HotPotatoState, Player, TableSettings, Card } from './game'
+import type { BlackjackState, PokerState, UnoState, HotPotatoState, RouletteState, RouletteBetDef, Player, TableSettings, Card } from './game'
 
 export type ClientMessage =
   | { type: 'join_room'; payload: { roomCode: string; token: string; displayName?: string; accountChips?: number } }
@@ -21,6 +21,9 @@ export type ClientMessage =
   | { type: 'uno_challenge_uno'; payload: { targetPlayerId: string } }
   | { type: 'uno_pass' }
   | { type: 'hp_pass' }
+  | { type: 'rl_place_bet'; payload: { bets: RouletteBetDef[] } }
+  | { type: 'rl_clear_bets' }
+  | { type: 'rl_confirm_bets' }
   | { type: 'ping' }
 
 export type ServerMessage =
@@ -41,6 +44,8 @@ export type ServerMessage =
   | { type: 'pk_winner'; payload: { playerId: string; amount: number; handRank: string; isSplit?: boolean; winnerIds?: string[] } }
   | { type: 'uno_state'; payload: UnoState }
   | { type: 'hp_state'; payload: HotPotatoState }
+  | { type: 'rl_state'; payload: RouletteState }
+  | { type: 'rl_round_result'; payload: RouletteState }
   | { type: 'chips_reset'; payload: { startingChips: number } }
   | { type: 'chat'; payload: { playerId: string; username: string; message: string; timestamp: number } }
   | { type: 'error'; payload: { message: string; code?: string } }
@@ -55,5 +60,5 @@ export interface RoomState {
   maxPlayers: number
   isStarted: boolean
   settings: TableSettings
-  gameState?: BlackjackState | PokerState | UnoState | HotPotatoState
+  gameState?: BlackjackState | PokerState | UnoState | HotPotatoState | RouletteState
 }

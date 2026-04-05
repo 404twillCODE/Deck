@@ -7,7 +7,8 @@ bindings = [
   { name = "BLACKJACK_TABLE", class_name = "BlackjackTableDO" },
   { name = "POKER_TABLE", class_name = "PokerTableDO" },
   { name = "UNO_TABLE", class_name = "UnoTableDO" },
-  { name = "HOT_POTATO_TABLE", class_name = "HotPotatoTableDO" }
+  { name = "HOT_POTATO_TABLE", class_name = "HotPotatoTableDO" },
+  { name = "ROULETTE_TABLE", class_name = "RouletteTableDO" }
 ]
 
 [[migrations]]
@@ -21,6 +22,10 @@ new_sqlite_classes = ["UnoTableDO"]
 [[migrations]]
 tag = "v3"
 new_sqlite_classes = ["HotPotatoTableDO"]
+
+[[migrations]]
+tag = "v4"
+new_sqlite_classes = ["RouletteTableDO"]
 
 [vars]
 ENVIRONMENT = "development"

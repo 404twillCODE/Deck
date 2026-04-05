@@ -320,8 +320,8 @@ const GAMES = [
     description: 'Place your bets and spin the wheel. Predict where it lands — numbers, colors, or ranges — and win chips if you’re right.',
     emoji: '🎰',
     category: 'casino' as const,
-    tags: ['Betting', 'Wheel'],
-    status: 'wip' as const,
+    tags: ['1-8 Players', 'European'],
+    status: 'live' as const,
   },
   {
     id: 'sus-meter',
@@ -424,7 +424,7 @@ function GameShowcase() {
       const res = await fetch(`${workerUrl}/api/rooms`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, gameType: gameId, hostId: 'pending', maxPlayers: gameId === 'hot-potato' ? 8 : gameId === 'poker' ? 6 : 5 }),
+        body: JSON.stringify({ code, gameType: gameId, hostId: 'pending', maxPlayers: gameId === 'hot-potato' || gameId === 'roulette' ? 8 : gameId === 'poker' ? 6 : 5 }),
       })
 
       if (res.ok) {
