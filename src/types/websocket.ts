@@ -20,6 +20,8 @@ export type ClientMessage =
   | { type: 'uno_call_uno' }
   | { type: 'uno_challenge_uno'; payload: { targetPlayerId: string } }
   | { type: 'uno_pass' }
+  | { type: 'uno_choose_swap_target'; payload: { targetPlayerId: string } }
+  | { type: 'set_team'; payload: { team: string | null } }
   | { type: 'hp_pass' }
   | { type: 'rl_place_bet'; payload: { bets: RouletteBetDef[] } }
   | { type: 'rl_clear_bets' }

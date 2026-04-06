@@ -7,7 +7,7 @@ import { AnimatedButton, GlassPanel, PremiumInput } from '@/components/ui'
 import { useUIStore } from '@/stores/ui-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { generateRoomCode } from '@/lib/utils'
-import { ArrowLeft, CircleDot, Spade, Palette, Flame, Target, Users, Coins, Layers, Trophy, CreditCard } from 'lucide-react'
+import { ArrowLeft, CircleDot, Spade, Palette, Flame, Target, Users, Coins, Layers, Trophy, CreditCard, Zap } from 'lucide-react'
 import Link from 'next/link'
 import type { GameType } from '@/types'
 
@@ -50,6 +50,7 @@ function CreateRoomContent() {
     if (type === 'blackjack') { setMaxPlayers('5'); setMinimumBet('50'); setStartingChips('10000'); setDeckCount('6') }
     if (type === 'poker') { setMaxPlayers('6'); setMinimumBet('100'); setStartingChips('10000'); setDeckCount('1') }
     if (type === 'uno') { setMaxPlayers('4'); setCardsPerPlayer('7'); setWinsToWin('1') }
+    if (type === 'ultimate-uno') { setMaxPlayers('4'); setCardsPerPlayer('7'); setWinsToWin('1') }
     if (type === 'hot-potato') { setMaxPlayers('8') }
     if (type === 'roulette') { setMaxPlayers('8'); setMinimumBet('10'); setStartingChips('10000') }
   }
@@ -82,7 +83,7 @@ function CreateRoomContent() {
       } else if (gameType === 'poker') {
         settings.startingChips = parseInt(startingChips)
         settings.minimumBet = parseInt(minimumBet)
-      } else if (gameType === 'uno') {
+      } else if (gameType === 'uno' || gameType === 'ultimate-uno') {
         settings.cardsPerPlayer = parseInt(cardsPerPlayer)
         settings.winsToWin = Math.max(1, Math.min(50, parseInt(winsToWin) || 1))
       } else if (gameType === 'hot-potato') {
@@ -131,7 +132,7 @@ function CreateRoomContent() {
         >
           <GlassPanel className="p-6">
             <h3 className="text-sm font-medium text-text-secondary mb-4">Game</h3>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               <button
                 className={`flex items-center gap-3 p-4 rounded-xl border transition-all ${
                   gameType === 'blackjack'
@@ -171,6 +172,20 @@ function CreateRoomContent() {
                 <Palette className={`h-5 w-5 ${gameType === 'uno' ? 'text-red-400' : 'text-text-tertiary'}`} />
                 <div className="text-left">
                   <p className="text-sm font-medium text-text-primary">Uno</p>
+                  <p className="text-xs text-text-tertiary">2-10 players</p>
+                </div>
+              </button>
+              <button
+                className={`flex items-center gap-3 p-4 rounded-xl border transition-all ${
+                  gameType === 'ultimate-uno'
+                    ? 'border-accent/50 bg-accent/5 shadow-[0_0_20px_rgba(99,102,241,0.08)]'
+                    : 'border-white/[0.06] hover:border-white/[0.1] bg-white/[0.02]'
+                }`}
+                onClick={() => selectGame('ultimate-uno')}
+              >
+                <Zap className={`h-5 w-5 ${gameType === 'ultimate-uno' ? 'text-yellow-400' : 'text-text-tertiary'}`} />
+                <div className="text-left">
+                  <p className="text-sm font-medium text-text-primary">Ultimate Uno</p>
                   <p className="text-xs text-text-tertiary">2-10 players</p>
                 </div>
               </button>
@@ -216,7 +231,7 @@ function CreateRoomContent() {
               onChange={(e) => setMaxPlayers(e.target.value)}
               icon={<Users className="h-4 w-4" />}
               min={gameType === 'hot-potato' ? 3 : gameType === 'roulette' ? 1 : 2}
-              max={gameType === 'poker' ? 9 : gameType === 'uno' || gameType === 'hot-potato' ? 10 : gameType === 'roulette' ? 8 : 7}
+              max={gameType === 'poker' ? 9 : (gameType === 'uno' || gameType === 'ultimate-uno' || gameType === 'hot-potato') ? 10 : gameType === 'roulette' ? 8 : 7}
             />
 
             {/* Blackjack settings */}
@@ -301,7 +316,7 @@ function CreateRoomContent() {
             )}
 
             {/* Uno settings */}
-            {gameType === 'uno' && (
+            {(gameType === 'uno' || gameType === 'ultimate-uno') && (
               <>
                 <PremiumInput
                   label="Cards Per Player"

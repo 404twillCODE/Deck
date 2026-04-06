@@ -19,7 +19,7 @@ import { PokerTable } from '@/components/game/poker-table'
 import { UnoTable } from '@/components/game/uno-table'
 import { HotPotatoTable } from '@/components/game/hot-potato-table'
 import { RouletteTable } from '@/components/game/roulette-table'
-import { ArrowLeft, Copy, Users, Play, Loader2, RefreshCw } from 'lucide-react'
+import { ArrowLeft, Copy, Users, Play, Loader2, RefreshCw, Shield } from 'lucide-react'
 import Link from 'next/link'
 import { recordGameResult } from '@/lib/stats'
 import type {
@@ -60,7 +60,7 @@ function useStatsRecorder(isFreePlay: boolean) {
       const player = pokerState.players.find((p) => p.id === user.id)
       if (!player) return
       won = player.result === 'win' || (player.winnings ?? 0) > 0
-    } else if (gameType === 'uno') {
+    } else if (gameType === 'uno' || gameType === 'ultimate-uno') {
       const unoState = gs as UnoState
       won = unoState.winnerId === user.id
     } else if (gameType === 'hot-potato') {
@@ -84,7 +84,7 @@ function useStatsRecorder(isFreePlay: boolean) {
             ? (gs as PokerState).players.find((p) => p.id === user.id)?.chips
             : gameType === 'roulette'
               ? (gs as RouletteState).players.find((p) => p.id === user.id)?.chips
-              : gameType === 'uno'
+              : (gameType === 'uno' || gameType === 'ultimate-uno')
                 ? null
                 : gameType === 'hot-potato'
                   ? null
@@ -327,7 +327,7 @@ function RoomContent() {
   }, [code, gameTypeParam, resolvedGameType])
 
   const isHost = roomState?.hostId === user?.id
-  const minPlayers = roomState?.gameType === 'roulette' ? 1 : 2
+  const minPlayers = roomState?.gameType === 'roulette' ? 1 : roomState?.gameType === 'ultimate-uno' ? 2 : 2
   const allReady = roomState?.players?.every((p) => p.isReady) && (roomState?.players?.length ?? 0) >= minPlayers
 
   // Authoritative: follow the room's actual setting (so toggles update everyone).
@@ -460,7 +460,7 @@ function RoomContent() {
   if (roomState?.isStarted && roomState.gameState) {
     if (roomState.gameType === 'blackjack') return <BlackjackTable wsRef={wsRef} />
     if (roomState.gameType === 'poker') return <PokerTable wsRef={wsRef} />
-    if (roomState.gameType === 'uno') return <UnoTable wsRef={wsRef} />
+    if (roomState.gameType === 'uno' || roomState.gameType === 'ultimate-uno') return <UnoTable wsRef={wsRef} />
     if (roomState.gameType === 'hot-potato') return <HotPotatoTable wsRef={wsRef} />
     if (roomState.gameType === 'roulette') return <RouletteTable wsRef={wsRef} />
   }
@@ -501,11 +501,13 @@ function RoomContent() {
                 ? 'Poker Table'
                 : (roomState?.gameType || gameTypeParam) === 'uno'
                   ? 'Uno Table'
-                  : (roomState?.gameType || gameTypeParam) === 'hot-potato'
-                    ? 'Hot Potato'
-                    : (roomState?.gameType || gameTypeParam) === 'roulette'
-                      ? 'Roulette Table'
-                      : 'Blackjack Table'}
+                  : (roomState?.gameType || gameTypeParam) === 'ultimate-uno'
+                    ? 'Ultimate Uno'
+                    : (roomState?.gameType || gameTypeParam) === 'hot-potato'
+                      ? 'Hot Potato'
+                      : (roomState?.gameType || gameTypeParam) === 'roulette'
+                        ? 'Roulette Table'
+                        : 'Blackjack Table'}
             </h1>
             <p className="text-text-secondary">
               Waiting for players... Share the room code to invite friends.
@@ -609,6 +611,57 @@ function RoomContent() {
               )}
             </div>
           </GlassPanel>
+
+          {(roomState?.gameType === 'uno' || roomState?.gameType === 'ultimate-uno') && !roomState?.isStarted && (
+            <GlassPanel className="p-6">
+              <div className="flex items-center gap-2 mb-4">
+                <Shield className="h-4 w-4 text-text-secondary" />
+                <h3 className="text-sm font-medium text-text-secondary">Teams (Optional)</h3>
+              </div>
+              <div className="flex flex-wrap gap-2 mb-3">
+                {['Solo', 'Team 1', 'Team 2', 'Team 3', 'Team 4'].map((label) => {
+                  const teamValue = label === 'Solo' ? null : label.toLowerCase().replace(' ', '-')
+                  const myTeam = roomState?.players?.find((p) => p.id === user?.id)?.team ?? null
+                  const isSelected = myTeam === teamValue
+                  const teamColors: Record<string, string> = {
+                    'Solo': 'border-white/[0.06] bg-white/[0.02]',
+                    'Team 1': 'border-blue-500/30 bg-blue-500/5',
+                    'Team 2': 'border-red-500/30 bg-red-500/5',
+                    'Team 3': 'border-emerald-500/30 bg-emerald-500/5',
+                    'Team 4': 'border-amber-500/30 bg-amber-500/5',
+                  }
+                  const teamActiveColors: Record<string, string> = {
+                    'Solo': 'border-accent/50 bg-accent/10 shadow-[0_0_12px_rgba(99,102,241,0.1)]',
+                    'Team 1': 'border-blue-500/60 bg-blue-500/15 shadow-[0_0_12px_rgba(59,130,246,0.15)]',
+                    'Team 2': 'border-red-500/60 bg-red-500/15 shadow-[0_0_12px_rgba(239,68,68,0.15)]',
+                    'Team 3': 'border-emerald-500/60 bg-emerald-500/15 shadow-[0_0_12px_rgba(16,185,129,0.15)]',
+                    'Team 4': 'border-amber-500/60 bg-amber-500/15 shadow-[0_0_12px_rgba(245,158,11,0.15)]',
+                  }
+                  return (
+                    <button
+                      key={label}
+                      onClick={() => wsRef.current?.send({ type: 'set_team', payload: { team: teamValue } })}
+                      className={`px-4 py-2 rounded-xl border text-sm font-medium transition-all ${
+                        isSelected ? teamActiveColors[label] : teamColors[label]
+                      } ${isSelected ? 'text-text-primary' : 'text-text-secondary hover:text-text-primary'}`}
+                    >
+                      {label}
+                    </button>
+                  )
+                })}
+              </div>
+              <div className="flex flex-wrap gap-2 text-xs text-text-tertiary">
+                {roomState?.players?.map((p) => {
+                  const teamLabel = p.team ? p.team.replace('-', ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : 'Solo'
+                  return (
+                    <span key={p.id} className="px-2 py-1 rounded-lg bg-white/[0.03]">
+                      {p.displayName}: {teamLabel}
+                    </span>
+                  )
+                })}
+              </div>
+            </GlassPanel>
+          )}
 
           <div className="flex gap-3">
             {!roomState?.players?.find((p) => p.id === user?.id)?.isReady && (

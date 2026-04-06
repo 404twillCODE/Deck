@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useGameStore } from '@/stores/game-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { FunDeckShuffle } from '@/components/ui'
-import { ArrowLeft, RotateCcw, RotateCw } from 'lucide-react'
+import { ArrowLeft, RotateCcw, RotateCw, BookOpen, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import Link from 'next/link'
 import type { UnoState, UnoCard, UnoColor } from '@/types'
@@ -286,10 +286,125 @@ function ColorChooser({ onChoose }: { onChoose: (color: UnoColor) => void }) {
   )
 }
 
+function SwapTargetPicker({
+  players,
+  myId,
+  onChoose,
+}: {
+  players: UnoState['players']
+  myId: string | undefined
+  onChoose: (targetId: string) => void
+}) {
+  const targets = players.filter((p) => p.id !== myId)
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.9 }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+    >
+      <div className="glass rounded-3xl p-8 max-w-sm w-full mx-4">
+        <h3 className="text-xl font-bold text-text-primary text-center mb-2">Swap Hands</h3>
+        <p className="text-sm text-text-secondary text-center mb-6">Pick a player to swap your hand with</p>
+        <div className="space-y-3">
+          {targets.map((p) => (
+            <button
+              key={p.id}
+              onClick={() => onChoose(p.id)}
+              className="w-full flex items-center justify-between p-4 rounded-xl bg-white/[0.04] border border-white/[0.06] hover:border-accent/40 hover:bg-accent/5 transition-all"
+            >
+              <span className="text-sm font-medium text-text-primary">{p.displayName}</span>
+              <span className="text-xs text-text-tertiary">{p.cardCount} cards</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </motion.div>
+  )
+}
+
+function RulesModal({ onClose, isUltimate }: { onClose: () => void; isUltimate: boolean }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ scale: 0.9, y: 20 }}
+        animate={{ scale: 1, y: 0 }}
+        exit={{ scale: 0.9, y: 20 }}
+        className="glass rounded-3xl p-6 sm:p-8 max-w-lg w-full mx-4 max-h-[80vh] overflow-y-auto [scrollbar-width:thin]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-xl font-bold text-text-primary">
+            {isUltimate ? 'Ultimate UNO Rules' : 'UNO Rules'}
+          </h3>
+          <button onClick={onClose} className="p-2 rounded-lg hover:bg-white/[0.06] transition-colors text-text-tertiary">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="space-y-4 text-sm">
+          <div className="space-y-2">
+            <h4 className="font-semibold text-text-primary">Basic Rules</h4>
+            <ul className="space-y-1.5 text-text-secondary list-disc list-inside">
+              <li>Match cards by color, number, or symbol</li>
+              <li>Draw if you can&apos;t play</li>
+              <li>Call UNO when you have 2 or fewer cards</li>
+              <li>First to empty their hand wins the round</li>
+            </ul>
+          </div>
+
+          <div className="space-y-2">
+            <h4 className="font-semibold text-text-primary">Stacking Rules</h4>
+            <ul className="space-y-1.5 text-text-secondary list-disc list-inside">
+              <li>Stack same numbers regardless of color</li>
+              <li>+2 and +4 can stack on each other (+2 on +4, +4 on +2)</li>
+              <li>+2s accumulate: +2, +4, +6, etc.</li>
+              <li>+4s accumulate: +4, +8, +12, etc.</li>
+              <li>Same action cards (skip, reverse) can be played on any color</li>
+            </ul>
+          </div>
+
+          {isUltimate && (
+            <>
+              <div className="border-t border-white/[0.06] pt-4 space-y-2">
+                <h4 className="font-semibold text-yellow-400 flex items-center gap-2">
+                  Ultimate Rules
+                </h4>
+                <ul className="space-y-1.5 text-text-secondary list-disc list-inside">
+                  <li><strong className="text-text-primary">Play a 7</strong> — Pick any player and swap your entire hand with theirs</li>
+                  <li><strong className="text-text-primary">Play a 0</strong> — Everyone&apos;s hand rotates clockwise</li>
+                  <li><strong className="text-text-primary">Stackable Skips</strong> — If you&apos;re about to be skipped, play a Skip card to deflect it to the next player</li>
+                </ul>
+              </div>
+
+              <div className="space-y-2">
+                <h4 className="font-semibold text-text-primary">Teams</h4>
+                <ul className="space-y-1.5 text-text-secondary list-disc list-inside">
+                  <li>Teams can be chosen in the lobby before the game starts</li>
+                  <li>When a team member wins a round, the whole team gets the win</li>
+                  <li>Solo players compete individually as normal</li>
+                </ul>
+              </div>
+            </>
+          )}
+        </div>
+      </motion.div>
+    </motion.div>
+  )
+}
+
 export function UnoTable({ wsRef }: UnoTableProps) {
   const roomState = useGameStore((s) => s.roomState)
   const { user } = useAuthStore()
   const [choosingColor, setChoosingColor] = useState<string | null>(null)
+  const [showRules, setShowRules] = useState(false)
 
   const [showShuffle, setShowShuffle] = useState(false)
   const [shuffleSpeed, setShuffleSpeed] = useState<'slow' | 'fast'>('slow')
@@ -323,6 +438,10 @@ export function UnoTable({ wsRef }: UnoTableProps) {
   const canPlayCard = useCallback(
     (card: UnoCard) => {
       if (!gameState || !isMyTurn) return false
+      if (gameState.awaitingSwapChoice) return false
+
+      if (gameState.pendingSkip) return card.type === 'skip'
+
       if (gameState.pendingDrawType === 'draw_two') return card.type === 'draw_two' || card.type === 'wild_draw_four'
       if (gameState.pendingDrawType === 'wild_draw_four') return card.type === 'wild_draw_four' || card.type === 'draw_two'
 
@@ -375,10 +494,12 @@ export function UnoTable({ wsRef }: UnoTableProps) {
   if (!gameState) return null
 
   const hasPending = gameState.pendingDraw > 0
+  const hasPendingSkip = gameState.pendingSkip === true
   const cannotDrawMoreFromPile = gameState.cannotDrawMoreFromPile === true
-  const canDraw = isMyTurn && (hasPending || !cannotDrawMoreFromPile)
+  const canDraw = isMyTurn && !gameState.awaitingSwapChoice && (hasPending || hasPendingSkip || !cannotDrawMoreFromPile)
   const winsToWin = Math.max(1, roomState?.settings?.winsToWin ?? 1)
-  const drawLabel = hasPending ? `Draw ${gameState.pendingDraw}` : 'Draw'
+  const drawLabel = hasPendingSkip ? 'Accept Skip' : hasPending ? `Draw ${gameState.pendingDraw}` : 'Draw'
+  const isUltimate = gameState.isUltimate === true
 
   return (
     <div className="min-h-dvh flex flex-col">
@@ -390,7 +511,7 @@ export function UnoTable({ wsRef }: UnoTableProps) {
             <Link href="/" className="p-2 rounded-lg hover:bg-white/[0.04] transition-colors text-text-secondary">
               <ArrowLeft className="h-5 w-5" />
             </Link>
-            <span className="text-sm font-semibold text-text-primary">UNO</span>
+            <span className="text-sm font-semibold text-text-primary">{isUltimate ? 'Ultimate UNO' : 'UNO'}</span>
             <span className="text-xs text-text-tertiary leading-snug">
               Round {gameState.roundNumber}
               <span className="text-text-tertiary/80">
@@ -407,6 +528,13 @@ export function UnoTable({ wsRef }: UnoTableProps) {
             </span>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowRules(true)}
+              className="p-1.5 rounded-lg hover:bg-white/[0.06] transition-colors text-text-tertiary hover:text-text-secondary"
+              title="Rules"
+            >
+              <BookOpen className="h-4 w-4" />
+            </button>
             {gameState.direction === 1 ? (
               <RotateCw className="h-4 w-4 text-text-tertiary" />
             ) : (
@@ -459,6 +587,17 @@ export function UnoTable({ wsRef }: UnoTableProps) {
                 <p className="text-[10px] text-text-tertiary mt-1">
                   {p.wins} {p.wins === 1 ? 'win' : 'wins'}
                 </p>
+                {p.team && (
+                  <span className={cn(
+                    'text-[9px] font-medium px-1.5 py-0.5 rounded-full mt-1 inline-block',
+                    p.team === 'team-1' ? 'bg-blue-500/20 text-blue-400' :
+                    p.team === 'team-2' ? 'bg-red-500/20 text-red-400' :
+                    p.team === 'team-3' ? 'bg-emerald-500/20 text-emerald-400' :
+                    'bg-amber-500/20 text-amber-400'
+                  )}>
+                    {p.team.replace('-', ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
+                  </span>
+                )}
               </div>
             )
           })}
@@ -475,6 +614,22 @@ export function UnoTable({ wsRef }: UnoTableProps) {
             >
               <p className="text-sm font-bold text-red-400">
                 Stack a +2 or +4, or draw {gameState.pendingDraw} cards!
+              </p>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Pending skip warning */}
+        <AnimatePresence>
+          {isMyTurn && hasPendingSkip && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="glass border border-amber-500/20 rounded-xl px-4 py-3 mb-4 text-center"
+            >
+              <p className="text-sm font-bold text-amber-400">
+                Play a Skip to deflect, or accept being skipped!
               </p>
             </motion.div>
           )}
@@ -510,7 +665,7 @@ export function UnoTable({ wsRef }: UnoTableProps) {
                 className={cn(
                   'text-xs font-semibold px-3 py-1 rounded-full min-h-[1.75rem] inline-flex items-center',
                   !isMyTurn && 'opacity-40',
-                  hasPending ? 'bg-red-500/20 text-red-400' : 'bg-white/[0.06] text-text-tertiary',
+                  hasPendingSkip ? 'bg-amber-500/20 text-amber-400' : hasPending ? 'bg-red-500/20 text-red-400' : 'bg-white/[0.06] text-text-tertiary',
                 )}
               >
                 {isMyTurn ? drawLabel : 'Draw pile'}
@@ -602,6 +757,16 @@ export function UnoTable({ wsRef }: UnoTableProps) {
       </div>
 
       <AnimatePresence>{choosingColor && <ColorChooser onChoose={handleChooseColor} />}</AnimatePresence>
+      <AnimatePresence>
+        {gameState.awaitingSwapChoice === user?.id && (
+          <SwapTargetPicker
+            players={gameState.players}
+            myId={user?.id}
+            onChoose={(targetId) => wsRef.current?.send({ type: 'uno_choose_swap_target', payload: { targetPlayerId: targetId } })}
+          />
+        )}
+      </AnimatePresence>
+      <AnimatePresence>{showRules && <RulesModal onClose={() => setShowRules(false)} isUltimate={isUltimate} />}</AnimatePresence>
     </div>
   )
 }

@@ -1,6 +1,6 @@
 export type Suit = 'hearts' | 'diamonds' | 'clubs' | 'spades'
 export type Rank = '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | 'J' | 'Q' | 'K' | 'A'
-export type GameType = 'blackjack' | 'poker' | 'uno' | 'hot-potato' | 'roulette'
+export type GameType = 'blackjack' | 'poker' | 'uno' | 'ultimate-uno' | 'hot-potato' | 'roulette'
 
 export type UnoColor = 'red' | 'yellow' | 'green' | 'blue'
 
@@ -18,6 +18,7 @@ export interface UnoState {
     isHost: boolean; isReady: boolean; isConnected: boolean; seatIndex: number
     cards: UnoCard[]; cardCount: number; wins: number
     hasCalledUno: boolean; canBeChallenged: boolean
+    team: string | null
   }[]
   currentPlayerIndex: number
   direction: 1 | -1
@@ -33,6 +34,9 @@ export interface UnoState {
   numberStackRank: number | null
   pendingDraw: number
   pendingDrawType: 'draw_two' | 'wild_draw_four' | null
+  pendingSkip: boolean
+  awaitingSwapChoice: string | null
+  isUltimate: boolean
   lastAction: { playerId: string; action: string; card?: UnoCard } | null
   winnerId: string | null
   roundNumber: number
@@ -202,6 +206,8 @@ export type ClientMessage =
   | { type: 'uno_call_uno' }
   | { type: 'uno_challenge_uno'; payload: { targetPlayerId: string } }
   | { type: 'uno_pass' }
+  | { type: 'uno_choose_swap_target'; payload: { targetPlayerId: string } }
+  | { type: 'set_team'; payload: { team: string | null } }
   | { type: 'hp_pass' }
   | { type: 'rl_place_bet'; payload: { bets: RouletteBetDef[] } }
   | { type: 'rl_clear_bets' }

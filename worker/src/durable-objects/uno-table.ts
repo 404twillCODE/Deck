@@ -14,6 +14,7 @@ interface UnoPlayerInternal extends Player {
   wins: number
   hasCalledUno: boolean
   canBeChallenged: boolean
+  team: string | null
 }
 
 interface Connection {
@@ -51,10 +52,16 @@ export class UnoTableDO extends DurableObject<Env> {
   private stackChainRank: number | null = null
   private pendingDraw = 0
   private pendingDrawType: 'draw_two' | 'wild_draw_four' | null = null
+  private pendingSkip = false
+  private awaitingSwapChoice: string | null = null
   private lastAction: { playerId: string; action: string; card?: UnoCard } | null = null
   private winnerId: string | null = null
   private roundNumber = 0
   private matchComplete = false
+
+  private get isUltimate(): boolean {
+    return this.settings.gameType === 'ultimate-uno'
+  }
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url)
@@ -71,7 +78,7 @@ export class UnoTableDO extends DurableObject<Env> {
     if (url.pathname === '/info') {
       return new Response(JSON.stringify({
         active: this.roomCode !== '' || this.players.length > 0,
-        gameType: 'uno',
+        gameType: this.settings.gameType || 'uno',
         players: this.players.length,
         freePlay: this.settings.freePlay,
       }))
@@ -123,6 +130,12 @@ export class UnoTableDO extends DurableObject<Env> {
           break
         case 'uno_pass':
           if (connection) this.handleEndTurn(connection.playerId)
+          break
+        case 'uno_choose_swap_target':
+          if (connection) this.handleChooseSwapTarget(connection.playerId, message.payload.targetPlayerId)
+          break
+        case 'set_team':
+          if (connection) this.handleSetTeam(connection.playerId, message.payload.team)
           break
         case 'chat_message':
           if (connection) {
@@ -193,7 +206,7 @@ export class UnoTableDO extends DurableObject<Env> {
         id: playerId, username: displayName, displayName, chips: 0,
         isHost: playerId === this.hostId || this.players.length === 0,
         isReady: false, isConnected: true, seatIndex: this.players.length,
-        wins: 0, hasCalledUno: false, canBeChallenged: false,
+        wins: 0, hasCalledUno: false, canBeChallenged: false, team: null,
       }
       this.players.push(unoPlayer)
       if (this.players.length === 1) this.hostId = playerId
@@ -289,7 +302,7 @@ export class UnoTableDO extends DurableObject<Env> {
   private startGame() {
     if (this.players.length < 2) return
     this.isStarted = true
-    this.broadcastAll({ type: 'game_started', payload: { gameType: 'uno' } })
+    this.broadcastAll({ type: 'game_started', payload: { gameType: this.settings.gameType || 'uno' } })
     this.startRound()
   }
 
@@ -306,6 +319,8 @@ export class UnoTableDO extends DurableObject<Env> {
     this.stackChainRank = null
     this.pendingDraw = 0
     this.pendingDrawType = null
+    this.pendingSkip = false
+    this.awaitingSwapChoice = null
     this.lastAction = null
     this.winnerId = null
     this.matchComplete = false
@@ -433,6 +448,28 @@ export class UnoTableDO extends DurableObject<Env> {
     this.lastAction = { playerId, action: 'play', card }
     this.clearChallengeExcept(playerId)
 
+    // Ultimate: playing a skip while pendingSkip just deflects it
+    if (this.pendingSkip && card.type === 'skip') {
+      this.applyEffect(card)
+      return
+    }
+
+    // Ultimate: playing a 7 triggers hand swap choice
+    if (this.isUltimate && card.type === 'number' && card.value === 7) {
+      const active = this.getActive()
+      if (active.length > 1) {
+        this.awaitingSwapChoice = playerId
+        this.broadcastPersonalized()
+        return
+      }
+    }
+
+    // Ultimate: playing a 0 rotates all hands — skip number chaining so effect fires immediately
+    if (this.isUltimate && card.type === 'number' && card.value === 0) {
+      this.applyEffect(card)
+      return
+    }
+
     const stackedSameNumber =
       topBefore != null && this.sameRankNumbers(card, topBefore)
 
@@ -477,6 +514,15 @@ export class UnoTableDO extends DurableObject<Env> {
 
     const hand = this.playerHands.get(playerId)
     if (!hand) return
+
+    // If there's a pending skip (ultimate), accept being skipped
+    if (this.pendingSkip) {
+      this.pendingSkip = false
+      this.lastAction = { playerId, action: 'skipped' }
+      this.advanceToNext()
+      this.broadcastPersonalized()
+      return
+    }
 
     // If there's a pending draw stack, draw all penalty cards and get skipped
     if (this.pendingDraw > 0) {
@@ -584,6 +630,11 @@ export class UnoTableDO extends DurableObject<Env> {
   }
 
   private canPlay(card: UnoCard): boolean {
+    if (this.awaitingSwapChoice) return false
+
+    // During a pending skip (ultimate): only skip cards can be played
+    if (this.pendingSkip) return card.type === 'skip'
+
     // During a pending draw stack: +2 stacks on +2, +4 stacks on +4, +4 can stack on +2, +2 can stack on +4
     if (this.pendingDrawType === 'draw_two') return card.type === 'draw_two' || card.type === 'wild_draw_four'
     if (this.pendingDrawType === 'wild_draw_four') return card.type === 'wild_draw_four' || card.type === 'draw_two'
@@ -625,9 +676,14 @@ export class UnoTableDO extends DurableObject<Env> {
 
     switch (card.type) {
       case 'skip': {
-        const skipped = this.nextIndex(this.currentPlayerIndex)
-        this.resetTurnState()
-        this.currentPlayerIndex = this.nextIndex(skipped)
+        if (this.isUltimate) {
+          this.pendingSkip = true
+          this.advanceToNext()
+        } else {
+          const skipped = this.nextIndex(this.currentPlayerIndex)
+          this.resetTurnState()
+          this.currentPlayerIndex = this.nextIndex(skipped)
+        }
         break
       }
       case 'reverse': {
@@ -653,12 +709,60 @@ export class UnoTableDO extends DurableObject<Env> {
         this.advanceToNext()
         break
       }
+      case 'number': {
+        if (this.isUltimate && card.value === 0) {
+          this.rotateHandsClockwise()
+        }
+        this.advanceToNext()
+        break
+      }
       default:
         this.advanceToNext()
     }
 
     if (this.currentPlayerIndex >= active.length) this.currentPlayerIndex = 0
     this.broadcastPersonalized()
+  }
+
+  // ─── Ultimate UNO ──────────────────────────────────
+
+  private handleChooseSwapTarget(playerId: string, targetId: string) {
+    if (this.awaitingSwapChoice !== playerId) return
+    if (targetId === playerId) return
+    const active = this.getActive()
+    if (!active.find((p) => p.id === targetId)) return
+
+    const myHand = this.playerHands.get(playerId) || []
+    const theirHand = this.playerHands.get(targetId) || []
+    this.playerHands.set(playerId, theirHand)
+    this.playerHands.set(targetId, myHand)
+
+    this.awaitingSwapChoice = null
+    this.lastAction = { playerId, action: 'swap' }
+    this.advanceToNext()
+    this.broadcastPersonalized()
+  }
+
+  private handleSetTeam(playerId: string, team: string | null) {
+    if (this.isStarted) return
+    const player = this.players.find((p) => p.id === playerId)
+    if (!player) return
+    player.team = team
+    for (const [pid, conn] of this.connections) {
+      this.sendTo(conn.ws, { type: 'room_state', payload: this.getRoomState(pid) })
+    }
+  }
+
+  private rotateHandsClockwise() {
+    const active = this.getActive()
+    if (active.length < 2) return
+
+    const hands = active.map((p) => this.playerHands.get(p.id) || [])
+    const lastHand = hands[hands.length - 1]
+    for (let i = hands.length - 1; i > 0; i--) {
+      this.playerHands.set(active[i].id, hands[i - 1])
+    }
+    this.playerHands.set(active[0].id, lastHand)
   }
 
   // ─── Helpers ────────────────────────────────────────
@@ -681,7 +785,14 @@ export class UnoTableDO extends DurableObject<Env> {
 
   private awardRoundWin(winnerId: string) {
     const winner = this.players.find((p) => p.id === winnerId)
-    if (winner) winner.wins += 1
+    if (!winner) return
+    if (winner.team) {
+      for (const p of this.players) {
+        if (p.team === winner.team) p.wins += 1
+      }
+    } else {
+      winner.wins += 1
+    }
   }
 
   private scheduleNextRoundOrMatch() {
@@ -719,6 +830,7 @@ export class UnoTableDO extends DurableObject<Env> {
         wins: p.wins,
         hasCalledUno: p.hasCalledUno,
         canBeChallenged: p.canBeChallenged,
+        team: p.team,
       })),
       currentPlayerIndex: this.currentPlayerIndex,
       direction: this.direction,
@@ -731,6 +843,9 @@ export class UnoTableDO extends DurableObject<Env> {
       numberStackRank: this.stackChainRank,
       pendingDraw: this.pendingDraw,
       pendingDrawType: this.pendingDrawType,
+      pendingSkip: this.pendingSkip,
+      awaitingSwapChoice: this.awaitingSwapChoice,
+      isUltimate: this.isUltimate,
       lastAction: this.lastAction,
       winnerId: this.winnerId,
       roundNumber: this.roundNumber,
@@ -742,7 +857,7 @@ export class UnoTableDO extends DurableObject<Env> {
     return {
       roomId: this.ctx.id.toString(),
       roomCode: this.roomCode,
-      gameType: 'uno' as const,
+      gameType: this.settings.gameType as 'uno' | 'ultimate-uno',
       hostId: this.hostId,
       players: this.players,
       maxPlayers: this.settings.maxPlayers,

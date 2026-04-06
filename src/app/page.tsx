@@ -305,6 +305,15 @@ const GAMES = [
     status: 'live' as const,
   },
   {
+    id: 'ultimate-uno',
+    name: 'Ultimate Uno',
+    description: 'UNO with wild house rules \u2014 7 swaps hands, 0 rotates everyone, stack skips, and cross-stack +2/+4. Chaos guaranteed.',
+    emoji: '\u26A1',
+    category: 'party' as const,
+    tags: ['2-10 Players', 'House Rules'],
+    status: 'live' as const,
+  },
+  {
     id: 'hot-potato',
     name: 'Hot Potato',
     description:
@@ -424,7 +433,7 @@ function GameShowcase() {
       const res = await fetch(`${workerUrl}/api/rooms`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, gameType: gameId, hostId: 'pending', maxPlayers: gameId === 'hot-potato' || gameId === 'roulette' ? 8 : gameId === 'poker' ? 6 : 5 }),
+        body: JSON.stringify({ code, gameType: gameId, hostId: 'pending', maxPlayers: gameId === 'hot-potato' || gameId === 'roulette' ? 8 : gameId === 'poker' ? 6 : (gameId === 'uno' || gameId === 'ultimate-uno') ? 10 : 5 }),
       })
 
       if (res.ok) {
